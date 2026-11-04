@@ -344,13 +344,17 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 ---
 
-## 11. Open questions for you
+## 11. Decisions and open questions
 
-1. **Primary jurisdiction & codes:** India (OISD-141/226, PNGRB T4S, IS standards) first, or global (ASME/CSA/ISO)?
-2. **Fluids for MVP:** natural gas and liquid hydrocarbons only, or also water, slurry, H₂ and CO₂?
-3. **Currency & cost data:** do you have in-house unit rates (₹/inch-km, $/t pipe, $/kW stations) to calibrate the cost engine?
-4. **Concession model specifics:** tariff-regulated (e.g. PNGRB tariff on a 12% post-tax return basis) or BOOT/PPP with handback? Is tax and depreciation needed in the MVP?
-5. **UI preference:** start with Streamlit (fast) or go straight to a web app (React + map)?
-6. **Deployment:** single-user desktop, internal server, or cloud SaaS?
+**Decided (2026-11-04):**
+* Jurisdiction: **India first** (PNGRB T4S, OISD-STD-141/226, ASME B31.4/B31.8, IS standards). See ADR 0002.
+* Fluids: **natural gas and liquid hydrocarbons**. Water, slurry, H₂ and CO₂ are deferred.
+* UI: **Streamlit**. See ADR 0003.
+* Phase 0 complete: repo skeleton, uv/pyproject packaging, CI (ruff, mypy strict, pytest on Python 3.11–3.13), pint units framework, ADRs 0001–0004.
 
-**Next step after your review:** start Phase 0 + Phase 1 (repo skeleton and PipeSpec Library MVP with API 5L grades and ASME B36.10M dimensions), developed test-first.
+**Still open:**
+1. **Cost data:** in-house unit rates (₹/inch-km, ₹/t pipe, ₹/kW stations) to calibrate the cost engine?
+2. **Concession model:** PNGRB-regulated tariff or BOOT/PPP with handback? Tax and depreciation in the MVP?
+3. **Deployment:** single-user desktop, internal server or cloud?
+
+**Next step:** Phase 1, the PipeSpec Library MVP (API 5L / ISO 3183 grades, ASME B36.10M dimensions, IS 3589), developed test-first.
