@@ -152,7 +152,15 @@ Availability(process, grade, od, wt_max, mills/region notes)   # constructabilit
 * **Gas (ASME B31.8 / OISD-226 / PNGRB T4S):** `t = P·D / (2·S·F·E·T)`, with design factor F by **location class** (Class 1 Div 1 = 0.80, Div 2 = 0.72, Class 2 = 0.60, Class 3 = 0.50, Class 4 = 0.40), joint factor E and temperature derating T.
 * **Liquids (ASME B31.4 / OISD-141):** `t = P·D / (2·0.72·E·SMYS)` plus corrosion/mechanical allowances.
 * **Class location** is derived automatically from building-density counts along the route (sliding 1.6 km × 400 m window). This is one of the main ways **alignment changes CAPEX**: routes that avoid settlements allow thinner walls.
-* Checks: minimum WT for handling (D/t limit), hydrotest pressure and test sections by elevation, external load at road/rail crossings (API RP 1102), and later buoyancy control at wetlands and river crossings.
+* **Buried-pipe loads per the American Lifelines Alliance (ALA) *Guidelines for the Design of Buried Steel Pipe*** (see `docs/mechanical-ala.md`, ADR 0005):
+  - ALA Appendix B soil springs (axial, lateral, uplift, bearing);
+  - earth and surface live load, ring deflection (Iowa) and ring buckling;
+  - thermal and combined stress with virtual anchor length;
+  - buoyancy and concrete weight coating (water, swamp, liquefied soil);
+  - seismic wave propagation, permanent ground deformation (PGD) and strain acceptance.
+
+  Every route segment runs these checks, and the cheapest remedy for a failing check (wall, grade, cover, concrete coating, re-route) flows into CAPEX.
+* Other checks: minimum WT for handling (D/t limit), hydrotest pressure and test sections by elevation, external load at road/rail crossings (API RP 1102).
 * Output: for each route segment, **(grade, WT, coating)** chosen from the PipeSpec Library and rounded to the next standard WT.
 
 ### 4.2 Hydraulics
@@ -309,7 +317,8 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 |---|---|---|
 | **0. Foundation** (1–2 wk) | Repo skeleton, packaging, CI (lint, type check, tests), units framework, ADRs | `pytest` green in CI; docs build |
 | **1. PipeSpec Library MVP** (3–4 wk) | API 5L/ISO 3183 grades, ASME B36.10M/B36.19M dimensions, process & coating catalogue, query API + CLI | ≥ 95% of B36.10M NPS ½–48 sizes loaded; validation tests pass; query examples documented |
-| **2. Engineering core** (4–5 wk) | Wall thickness (B31.4/B31.8 + OISD/T4S factors), class location, liquid & gas hydraulics, station siting | Golden tests against published worked examples agree within 1% |
+| **2a. Mechanical design (ALA)** ✅ | Pressure design (B31.4/B31.8 + OISD/T4S factors) and ALA buried-pipe checks, `assess_segment()`, Streamlit tab | Every formula matches an independent hand calculation |
+| **2b. Engineering core** (4–5 wk) | Class location from route data, liquid & gas hydraulics, station siting; FE model for fault crossings and transverse PGD | Golden tests against published worked examples agree within 1% |
 | **3. Cost & economics** (3 wk) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity | Hand-checked spreadsheet reconciles to the cent; economic-diameter curve reproduces the textbook U-shape |
 | **4. Routing engine** (5–6 wk) | Cost-surface builder from open data, least-cost path, k-alternatives, profile/crossing/class extraction, KML export | On a sample AOI, produces 3+ distinct corridors in < 2 min; crossings counted correctly against manual check |
 | **5. Optimiser** (3–4 wk) | Inner enumeration/MILP, outer re-weighting loop, scenario tree, convergence | Converges on a test case; demonstrates a route change driven by OPEX |
@@ -359,4 +368,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 1 MVP complete: PipeSpec Library with API 5L / ISO 3183 grades, ASME B36.10M NPS ½–48, IS 3589 grades, process and coating catalogue, Python query API, `pipespec` CLI and Streamlit tab. Seed data lives in `src/pipeline_analytics/pipespec/data/` (inside the package so it ships with it). See `docs/pipespec.md` for coverage, verification workflow and the Phase 1b backlog.
 
-**Next step:** Phase 2, the engineering core (wall thickness to OISD/T4S/ASME B31.4/B31.8, class location, liquid and gas hydraulics).
+* Phase 2a complete: mechanical design per ALA *Guidelines for the Design of Buried Steel Pipe* (ADR 0005, `docs/mechanical-ala.md`).
+
+**Next step:** Phase 2b: class location, hydraulics, and the FE model for fault crossings and transverse PGD.

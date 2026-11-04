@@ -40,3 +40,19 @@ def test_library_tab_increment_policy() -> None:
     at = AppTest.from_file(str(APP), default_timeout=30).run()
     at.radio(key="lib_policy").set_value("increment").run()
     assert at.metric[1].value == "10 mm"
+
+
+def test_mechanical_tab_default_passes() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    assert not at.exception
+    result = next(m for m in at.metric if m.label == "Result")
+    assert result.value == "PASS"
+    assert "hoop stress" in result.delta
+
+
+def test_mechanical_tab_buoyancy_fails_and_sizes_concrete() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    at.checkbox(key="m_buoy").check().run()
+    result = next(m for m in at.metric if m.label == "Result")
+    assert result.value == "FAIL"
+    assert any("Concrete weight coating needed: 65 mm" in i.value for i in at.info)

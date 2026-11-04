@@ -11,7 +11,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 |---|---|---|
 | 0 | Repo skeleton, CI, units framework, ADRs | ✅ done |
 | 1 | PipeSpec Library (API 5L / ISO 3183, ASME B36.10M, IS 3589): see [`docs/pipespec.md`](docs/pipespec.md) | ✅ MVP done |
-| 2 | Engineering core (wall thickness, class location, hydraulics) | next |
+| 2a | Mechanical design per ALA buried-pipe guidelines: see [`docs/mechanical-ala.md`](docs/mechanical-ala.md) | ✅ core checks done |
+| 2b | Class location from route data, hydraulics, PGD/fault-crossing FE | next |
 
 ## Development
 
@@ -42,7 +43,7 @@ src/pipeline_analytics/
   core/         units (pint registry with MMSCMD, MMTPA, kgf/cm², …), jurisdiction & code basis
   pipespec/     pipe specification library + `pipespec` CLI; seed YAML in pipespec/data/
   codes/        OISD / T4S / ASME rule modules       (Phase 2)
-  mechanical/   wall thickness, class location       (Phase 2)
+  mechanical/   ALA buried-pipe checks: pressure, soil springs, loads, thermal, buoyancy, seismic
   hydraulics/   liquid & gas hydraulics, stations    (Phase 2)
   cost/ economics/                                   (Phase 3)
   routing/      GIS least-cost alignment             (Phase 4)
