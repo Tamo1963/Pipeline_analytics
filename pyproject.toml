@@ -15,6 +15,9 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.scripts]
+pipespec = "pipeline_analytics.pipespec.cli:main"
+
 [project.optional-dependencies]
 ui = ["streamlit>=1.38"]
 
@@ -49,5 +52,5 @@ module = ["pint.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+testpaths = ["tests", "src"]
+addopts = "-ra --strict-markers --doctest-modules"

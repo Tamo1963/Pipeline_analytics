@@ -1,0 +1,30 @@
+# Line-pipe manufacturing processes (API 5L pipe types).
+# OD / wall-thickness ranges are INDICATIVE typical mill capability for screening.
+# Replace with actual vendor/mill data for each project (e.g. Indian mill lists).
+# Weld joint factor E: ASME B31.4 / B31.8 give E = 1.0 for API 5L SMLS, HFW (ERW)
+# and SAW pipe.
+processes:
+  - code: SMLS
+    name: Seamless
+    psl: [1, 2]
+    od_mm: [21.3, 610.0]
+    wt_mm: [2.0, 60.0]
+    joint_factor: 1.0
+  - code: HFW
+    name: High-frequency welded (ERW)
+    psl: [1, 2]
+    od_mm: [60.3, 610.0]
+    wt_mm: [2.8, 22.0]
+    joint_factor: 1.0
+  - code: SAWL
+    name: Longitudinal submerged-arc welded (LSAW; UOE/JCOE)
+    psl: [1, 2]
+    od_mm: [406.4, 1524.0]
+    wt_mm: [6.4, 40.0]
+    joint_factor: 1.0
+  - code: SAWH
+    name: Helical submerged-arc welded (HSAW / spiral)
+    psl: [1, 2]
+    od_mm: [406.4, 2540.0]
+    wt_mm: [5.0, 25.4]
+    joint_factor: 1.0

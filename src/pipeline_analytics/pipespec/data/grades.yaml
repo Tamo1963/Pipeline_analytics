@@ -1,0 +1,35 @@
+# Line-pipe steel grades. Strengths in MPa.
+# API 5L / ISO 3183: PSL1 = minimum values only; PSL2 adds maxima, Y/T limit and
+# mandatory toughness. Delivery conditions (PSL2 suffix): R as-rolled, N normalized,
+# Q quenched and tempered, M thermomechanically rolled.
+# Source: API 5L 46th ed. Tables 6 (PSL1) and 7 (PSL2) / ISO 3183:2019.
+grades:
+  # ---- API 5L PSL1 ----
+  - {standard: API-5L, psl: 1, name: A25,  iso_name: L175,  smys: 175, smts: 310, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: A25P, iso_name: L175P, smys: 175, smts: 310, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: A,    iso_name: L210,  smys: 210, smts: 335, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: B,    iso_name: L245,  smys: 245, smts: 415, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X42,  iso_name: L290,  smys: 290, smts: 415, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X46,  iso_name: L320,  smys: 320, smts: 435, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X52,  iso_name: L360,  smys: 360, smts: 460, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X56,  iso_name: L390,  smys: 390, smts: 490, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X60,  iso_name: L415,  smys: 415, smts: 520, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X65,  iso_name: L450,  smys: 450, smts: 535, ref: "Table 6"}
+  - {standard: API-5L, psl: 1, name: X70,  iso_name: L485,  smys: 485, smts: 570, ref: "Table 6"}
+  # ---- API 5L PSL2 ----
+  - {standard: API-5L, psl: 2, name: B,    iso_name: L245, conditions: [R, N, Q, M], smys: 245, smys_max: 450,  smts: 415, smts_max: 655,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X42,  iso_name: L290, conditions: [R, N, Q, M], smys: 290, smys_max: 495,  smts: 415, smts_max: 655,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X46,  iso_name: L320, conditions: [N, Q, M],    smys: 320, smys_max: 525,  smts: 435, smts_max: 655,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X52,  iso_name: L360, conditions: [N, Q, M],    smys: 360, smys_max: 530,  smts: 460, smts_max: 760,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X56,  iso_name: L390, conditions: [N, Q, M],    smys: 390, smys_max: 545,  smts: 490, smts_max: 760,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X60,  iso_name: L415, conditions: [N, Q, M],    smys: 415, smys_max: 565,  smts: 520, smts_max: 760,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X65,  iso_name: L450, conditions: [Q, M],       smys: 450, smys_max: 600,  smts: 535, smts_max: 760,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X70,  iso_name: L485, conditions: [Q, M],       smys: 485, smys_max: 635,  smts: 570, smts_max: 760,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X80,  iso_name: L555, conditions: [Q, M],       smys: 555, smys_max: 705,  smts: 625, smts_max: 825,  yt_max: 0.93, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X90,  iso_name: L625, conditions: [Q, M],       smys: 625, smys_max: 775,  smts: 695, smts_max: 915,  yt_max: 0.97, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X100, iso_name: L690, conditions: [Q, M],       smys: 690, smys_max: 840,  smts: 760, smts_max: 990,  yt_max: 0.97, ref: "Table 7"}
+  - {standard: API-5L, psl: 2, name: X120, iso_name: L830, conditions: [M],          smys: 830, smys_max: 1050, smts: 915, smts_max: 1145, yt_max: 0.99, ref: "Table 7"}
+  # ---- IS 3589 (water and sewage service; not for hydrocarbon pipelines) ----
+  - {standard: IS-3589, name: Fe330, smys: 195, smts: 330, ref: "Table 1"}
+  - {standard: IS-3589, name: Fe410, smys: 250, smts: 410, ref: "Table 1"}
+  - {standard: IS-3589, name: Fe450, smys: 275, smts: 450, ref: "Table 1"}

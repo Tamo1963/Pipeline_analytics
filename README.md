@@ -10,7 +10,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Repo skeleton, CI, units framework, ADRs | ✅ done |
-| 1 | PipeSpec Library (API 5L / ISO 3183, ASME B36.10M) | next |
+| 1 | PipeSpec Library (API 5L / ISO 3183, ASME B36.10M, IS 3589): see [`docs/pipespec.md`](docs/pipespec.md) | ✅ MVP done |
+| 2 | Engineering core (wall thickness, class location, hydraulics) | next |
 
 ## Development
 
@@ -39,7 +40,7 @@ uv run streamlit run apps/streamlit/app.py
 ```
 src/pipeline_analytics/
   core/         units (pint registry with MMSCMD, MMTPA, kgf/cm², …), jurisdiction & code basis
-  pipespec/     pipe specification library          (Phase 1)
+  pipespec/     pipe specification library + `pipespec` CLI; seed YAML in pipespec/data/
   codes/        OISD / T4S / ASME rule modules       (Phase 2)
   mechanical/   wall thickness, class location       (Phase 2)
   hydraulics/   liquid & gas hydraulics, stations    (Phase 2)
@@ -49,5 +50,5 @@ src/pipeline_analytics/
   bot/          feasibility specialist bot           (Phase 6)
   reports/ api/                                      (Phase 7)
 apps/streamlit/ UI
-data/           seed data (YAML), sample costs, sample GIS
+data/           sample costs, sample GIS (later phases)
 ```

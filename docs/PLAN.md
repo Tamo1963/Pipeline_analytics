@@ -357,4 +357,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 2. **Concession model:** PNGRB-regulated tariff or BOOT/PPP with handback? Tax and depreciation in the MVP?
 3. **Deployment:** single-user desktop, internal server or cloud?
 
-**Next step:** Phase 1, the PipeSpec Library MVP (API 5L / ISO 3183 grades, ASME B36.10M dimensions, IS 3589), developed test-first.
+* Phase 1 MVP complete: PipeSpec Library with API 5L / ISO 3183 grades, ASME B36.10M NPS ½–48, IS 3589 grades, process and coating catalogue, Python query API, `pipespec` CLI and Streamlit tab. Seed data lives in `src/pipeline_analytics/pipespec/data/` (inside the package so it ships with it). See `docs/pipespec.md` for coverage, verification workflow and the Phase 1b backlog.
+
+**Next step:** Phase 2, the engineering core (wall thickness to OISD/T4S/ASME B31.4/B31.8, class location, liquid and gas hydraulics).

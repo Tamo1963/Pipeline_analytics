@@ -1,0 +1,7 @@
+# External coatings / linings. Temperature limits are INDICATIVE screening values;
+# the governing limit is the coating system qualification per the standard.
+coatings:
+  - {code: 3LPE, name: Three-layer polyethylene, standard: ISO-21809, part: "1", function: corrosion, temp_min_c: -40, temp_max_c: 80}
+  - {code: 3LPP, name: Three-layer polypropylene, standard: ISO-21809, part: "1", function: corrosion, temp_min_c: -20, temp_max_c: 110}
+  - {code: FBE, name: Fusion-bonded epoxy (single layer), standard: ISO-21809, part: "2", function: corrosion, temp_min_c: -40, temp_max_c: 85}
+  - {code: CWC, name: Concrete weight coating, standard: ISO-21809, part: "5", function: buoyancy, temp_min_c: null, temp_max_c: null}
