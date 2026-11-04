@@ -37,20 +37,20 @@ from pipeline_analytics.pipespec import default_library, WtPolicy
 
 lib = default_library()
 
-lib.grade("X70M")                      # PSL2 X70; also "X70", "L485", "L485M/X70M"
+lib.grade("X70M")  # PSL2 X70; also "X70", "L485", "L485M/X70M"
 lib.grade("X52", psl=1)
-lib.find_grades(psl=2, min_smys=450)   # X65 ... X120
+lib.find_grades(psl=2, min_smys=450)  # X65 ... X120
 lib.find_grades(psl=2, condition="N")  # normalized grades: B ... X60
 
-size = lib.size(24)                    # or lib.size("1-1/4"), lib.size(dn=600), lib.size_by_od(610)
-size.wt("STD").wt_mm                   # 9.53
-size.weight_kg_m(12.7)                 # 187.08
+size = lib.size(24)  # or lib.size("1-1/4"), lib.size(dn=600), lib.size_by_od(610)
+size.wt("STD").wt_mm  # 9.53
+size.weight_kg_m(12.7)  # 187.08
 
-lib.next_wall_thickness(size, 11.2)                        # 12.7 (next designated WT)
-lib.next_wall_thickness(size, 11.23, WtPolicy.INCREMENT)   # 11.3 (0.1 mm mill step)
+lib.next_wall_thickness(size, 11.2)  # 12.7 (next designated WT)
+lib.next_wall_thickness(size, 11.23, WtPolicy.INCREMENT)  # 11.3 (0.1 mm mill step)
 
 lib.processes_for(od_mm=508, wt_mm=30)  # SMLS, SAWL
-lib.coatings_for(design_temp_c=95)      # 3LPP
+lib.coatings_for(design_temp_c=95)  # 3LPP
 
 # PSL2 grades >= X65 as HSAW at NPS 36 with WT <= 15.9 mm
 lib.find(36, min_grade="X65", process="SAWH", max_wt_mm=15.9)
