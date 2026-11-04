@@ -19,7 +19,7 @@ dependencies = [
 pipespec = "pipeline_analytics.pipespec.cli:main"
 
 [project.optional-dependencies]
-ui = ["streamlit>=1.38"]
+ui = ["streamlit>=1.38", "pandas>=2.2"]
 
 [dependency-groups]
 dev = [
@@ -28,6 +28,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
+    "pandas-stubs>=2.2",
 ]
 
 [tool.hatch.build.targets.wheel]

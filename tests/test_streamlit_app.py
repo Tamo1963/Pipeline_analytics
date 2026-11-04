@@ -56,3 +56,19 @@ def test_mechanical_tab_buoyancy_fails_and_sizes_concrete() -> None:
     result = next(m for m in at.metric if m.label == "Result")
     assert result.value == "FAIL"
     assert any("Concrete weight coating needed: 65 mm" in i.value for i in at.info)
+
+
+def test_hydraulics_tab_gas_default() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    assert not at.exception
+    stations = next(m for m in at.metric if m.label == "Stations")
+    assert int(stations.value) >= 1
+    assert any("Class 3" in m.value for m in at.markdown)
+
+
+def test_hydraulics_tab_liquid() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=30).run()
+    at.selectbox(key="h_service").set_value("liquid").run()
+    assert not at.exception
+    delivery = next(m for m in at.metric if m.label == "Delivery pressure (barg)")
+    assert float(delivery.value) >= 2.0

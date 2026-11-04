@@ -318,7 +318,8 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **0. Foundation** (1–2 wk) | Repo skeleton, packaging, CI (lint, type check, tests), units framework, ADRs | `pytest` green in CI; docs build |
 | **1. PipeSpec Library MVP** (3–4 wk) | API 5L/ISO 3183 grades, ASME B36.10M/B36.19M dimensions, process & coating catalogue, query API + CLI | ≥ 95% of B36.10M NPS ½–48 sizes loaded; validation tests pass; query examples documented |
 | **2a. Mechanical design (ALA)** ✅ | Pressure design (B31.4/B31.8 + OISD/T4S factors) and ALA buried-pipe checks, `assess_segment()`, Streamlit tab | Every formula matches an independent hand calculation |
-| **2b. Engineering core** (4–5 wk) | Class location from route data, liquid & gas hydraulics, station siting; FE model for fault crossings and transverse PGD | Golden tests against published worked examples agree within 1% |
+| **2b. Class location & hydraulics** ✅ | Location class (B31.8 840.2 / T4S), MAOP along route, liquid & gas hydraulics, station siting, power and fuel | Gas flow equation matches numerical integration within 0.01%; all formulas hand-checked |
+| **2c. PGD finite-element model** | Fault crossings, transverse PGD, settlement using the ALA soil springs | Agreement with published benchmark cases |
 | **3. Cost & economics** (3 wk) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity | Hand-checked spreadsheet reconciles to the cent; economic-diameter curve reproduces the textbook U-shape |
 | **4. Routing engine** (5–6 wk) | Cost-surface builder from open data, least-cost path, k-alternatives, profile/crossing/class extraction, KML export | On a sample AOI, produces 3+ distinct corridors in < 2 min; crossings counted correctly against manual check |
 | **5. Optimiser** (3–4 wk) | Inner enumeration/MILP, outer re-weighting loop, scenario tree, convergence | Converges on a test case; demonstrates a route change driven by OPEX |
@@ -370,4 +371,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 2a complete: mechanical design per ALA *Guidelines for the Design of Buried Steel Pipe* (ADR 0005, `docs/mechanical-ala.md`).
 
-**Next step:** Phase 2b: class location, hydraulics, and the FE model for fault crossings and transverse PGD.
+* Phase 2b complete: class location and hydraulics with station siting (`docs/hydraulics-class-location.md`).
+
+**Next step:** Phase 3, cost and lifecycle economics, which closes the CAPEX + OPEX loop. Phase 2c (PGD finite-element model) follows when routes cross mapped faults or slide zones.

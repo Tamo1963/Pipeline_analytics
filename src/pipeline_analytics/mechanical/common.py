@@ -125,7 +125,8 @@ class CheckResult(_Frozen):
 
     @property
     def passed(self) -> bool:
-        return self.utilisation <= 1.0 + 1e-12
+        # 1e-9 absorbs round-off when a design is trimmed to exactly meet a limit
+        return self.utilisation <= 1.0 + 1e-9
 
     def __str__(self) -> str:
         status = "PASS" if self.passed else "FAIL"

@@ -5,11 +5,27 @@ Run with:  uv run streamlit run apps/streamlit/app.py
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from pipeline_analytics import __version__
+from pipeline_analytics.codes.class_location import (
+    Building,
+    class_summary,
+    classify_route,
+    maop_along_route,
+)
 from pipeline_analytics.core.jurisdiction import Service, StudyDefaults, code_basis
 from pipeline_analytics.core.units import Q_
+from pipeline_analytics.hydraulics import (
+    GasStationInput,
+    HydraulicsError,
+    Liquid,
+    Profile,
+    PumpStationInput,
+    gas_hydraulics,
+    liquid_hydraulics,
+)
 from pipeline_analytics.mechanical import (
     BuoyancyInput,
     Coating,
@@ -28,7 +44,9 @@ st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
-basis_tab, library_tab, mech_tab = st.tabs(["Study basis", "Pipe library", "Mechanical (ALA)"])
+basis_tab, library_tab, mech_tab, hyd_tab = st.tabs(
+    ["Study basis", "Pipe library", "Mechanical (ALA)", "Class location & hydraulics"]
+)
 
 # --------------------------------------------------------------------- basis
 with basis_tab:
@@ -237,6 +255,167 @@ with mech_tab:
                     result.springs.uplift,
                     result.springs.bearing,
                 )
+            ],
+            hide_index=True,
+        )
+
+# ------------------------------------------------- class location & hydraulics
+with hyd_tab:
+    st.caption(
+        "Location class per ASME B31.8 840.2 (as adopted by PNGRB T4S / OISD-STD-226), "
+        "MAOP envelope from the wall and grade, and pump/compressor station siting. "
+        "Screening accuracy: Papay Z-factor, isothermal gas flow."
+    )
+    h1, h2 = st.columns(2)
+    with h1:
+        st.markdown("**Route elevation profile**")
+        prof_df = st.data_editor(
+            pd.DataFrame(
+                {
+                    "chainage_km": [0, 50, 100, 150, 200, 250, 300],
+                    "elevation_m": [50, 120, 300, 250, 180, 90, 60],
+                }
+            ),
+            num_rows="dynamic",
+            key="h_profile",
+        )
+        st.markdown("**Buildings near the route** (dwelling units within 200 m)")
+        bld_df = st.data_editor(
+            pd.DataFrame(
+                {
+                    "chainage_km": [40.0, 120.0],
+                    "offset_m": [80.0, 30.0],
+                    "dwelling_units": [15, 60],
+                    "storeys": [1, 2],
+                }
+            ),
+            num_rows="dynamic",
+            key="h_buildings",
+        )
+    with h2:
+        st.markdown("**Pipe and flow**")
+        h_service = Service(st.selectbox("Service", [s.value for s in Service], key="h_service"))
+        h_nps = st.selectbox("NPS", [s.nps for s in lib.sizes], index=20, key="h_nps")
+        h_wt = st.number_input("Wall thickness (mm)", value=9.53, min_value=1.0, key="h_wt")
+        h_grade = st.selectbox(
+            "Grade (PSL2)", [g.name for g in lib.find_grades(psl=2)], index=7, key="h_grade"
+        )
+        if h_service is Service.GAS:
+            h_flow = st.number_input("Flow (MMSCMD)", value=6.0, min_value=0.1, key="h_flow")
+            h_supply = st.number_input("Supply pressure (barg)", value=40.0, key="h_supply")
+            h_deliv = st.number_input("Delivery pressure min (barg)", value=30.0, key="h_deliv")
+        else:
+            h_flow = st.number_input("Flow (MMTPA)", value=5.0, min_value=0.1, key="h_flow_l")
+            h_rho = st.number_input("Density (kg/m³)", value=850.0, key="h_rho")
+            h_visc = st.number_input("Viscosity (cSt)", value=10.0, min_value=0.1, key="h_visc")
+            h_supply = st.number_input("Supply pressure (barg)", value=1.0, key="h_supply_l")
+            h_deliv = st.number_input("Delivery pressure min (barg)", value=2.0, key="h_deliv_l")
+
+    try:
+        prof = Profile(
+            chainage_m=tuple(float(x) * 1000 for x in prof_df["chainage_km"]),
+            elevation_m=tuple(float(z) for z in prof_df["elevation_m"]),
+        ).resample(1000)
+        buildings = [
+            Building(
+                chainage_m=float(r["chainage_km"]) * 1000,
+                offset_m=float(r["offset_m"]),
+                dwelling_units=int(r["dwelling_units"]),
+                storeys=int(r["storeys"]),
+            )
+            for r in bld_df.dropna().to_dict("records")
+        ]
+        h_pipe = pipe_from_library(h_nps, h_wt, h_grade)
+        if h_service is Service.GAS:
+            segs = classify_route(prof.length_m, buildings)
+            maop = maop_along_route(segs, h_pipe, prof.chainage_m)
+        else:
+            segs = []
+            maop = maop_along_route([], h_pipe, prof.chainage_m, service=Service.LIQUID)
+        if h_service is Service.GAS:
+            hyd = gas_hydraulics(
+                prof,
+                h_pipe.id_m,
+                Q_(h_flow, "MMSCMD"),
+                GasStationInput(
+                    supply_pressure_pa_g=h_supply * 1e5, delivery_min_pa_g=h_deliv * 1e5
+                ),
+                maop_pa_g=maop,
+            )
+            hyd_checks = hyd.checks
+            march = hyd.march
+        else:
+            liq_res = liquid_hydraulics(
+                prof,
+                h_pipe.id_m,
+                Q_(h_flow, "MMTPA"),
+                PumpStationInput(
+                    supply_pressure_pa_g=h_supply * 1e5, delivery_min_pa_g=h_deliv * 1e5
+                ),
+                maop_pa_g=maop,
+                liquid=Liquid(density_kg_m3=h_rho, kinematic_viscosity_m2_s=h_visc * 1e-6),
+            )
+            hyd_checks = liq_res.checks
+            march = liq_res.march
+    except (ValueError, HydraulicsError) as e:
+        st.error(str(e))
+    else:
+        if segs:
+            st.markdown("**Location classes**")
+            st.dataframe(
+                [
+                    {
+                        "From km": round(sg.start_m / 1000, 2),
+                        "To km": round(sg.end_m / 1000, 2),
+                        "Class": sg.location_class.value,
+                        "Reason": sg.reason,
+                    }
+                    for sg in segs
+                ],
+                hide_index=True,
+            )
+            st.write(
+                "Length by class: "
+                + ", ".join(
+                    f"Class {k.value}: {v / 1000:.1f} km" for k, v in class_summary(segs).items()
+                )
+            )
+        n_st = len(march.stations)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Stations", str(n_st))
+        c2.metric("Total power (MW)", f"{march.total_power_w / 1e6:.2f}")
+        c3.metric("Delivery pressure (barg)", f"{march.delivery_pressure_pa_g / 1e5:.1f}")
+        st.line_chart(
+            pd.DataFrame(
+                {
+                    "chainage_km": [x / 1000 for x in march.chainage_m],
+                    "pressure_barg": [p / 1e5 for p in march.pressure_pa_g],
+                    "MAOP_barg": [m / 1e5 for m in maop],
+                }
+            ).set_index("chainage_km")
+        )
+        if march.stations:
+            st.dataframe(
+                [
+                    {
+                        "Chainage km": st_.chainage_m / 1000,
+                        "Suction barg": round(st_.suction_pa_g / 1e5, 1),
+                        "Discharge barg": round(st_.discharge_pa_g / 1e5, 1),
+                        "Power MW": round(st_.power_w / 1e6, 2),
+                    }
+                    for st_ in march.stations
+                ],
+                hide_index=True,
+            )
+        st.dataframe(
+            [
+                {
+                    "Check": c.name,
+                    "UR": round(c.utilisation, 3),
+                    "Status": "PASS" if c.passed else "FAIL",
+                    "Reference": c.ref,
+                }
+                for c in hyd_checks
             ],
             hide_index=True,
         )

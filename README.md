@@ -12,7 +12,9 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 0 | Repo skeleton, CI, units framework, ADRs | ✅ done |
 | 1 | PipeSpec Library (API 5L / ISO 3183, ASME B36.10M, IS 3589): see [`docs/pipespec.md`](docs/pipespec.md) | ✅ MVP done |
 | 2a | Mechanical design per ALA buried-pipe guidelines: see [`docs/mechanical-ala.md`](docs/mechanical-ala.md) | ✅ core checks done |
-| 2b | Class location from route data, hydraulics, PGD/fault-crossing FE | next |
+| 2b | Class location and liquid/gas hydraulics with station siting: see [`docs/hydraulics-class-location.md`](docs/hydraulics-class-location.md) | ✅ done |
+| 2c | FE model for fault crossings, transverse PGD, settlement | planned |
+| 3 | Cost and lifecycle economics | next |
 
 ## Development
 
@@ -42,9 +44,9 @@ uv run streamlit run apps/streamlit/app.py
 src/pipeline_analytics/
   core/         units (pint registry with MMSCMD, MMTPA, kgf/cm², …), jurisdiction & code basis
   pipespec/     pipe specification library + `pipespec` CLI; seed YAML in pipespec/data/
-  codes/        OISD / T4S / ASME rule modules       (Phase 2)
+  codes/        location class (B31.8 840.2 / T4S / OISD-226), MAOP along route
   mechanical/   ALA buried-pipe checks: pressure, soil springs, loads, thermal, buoyancy, seismic
-  hydraulics/   liquid & gas hydraulics, stations    (Phase 2)
+  hydraulics/   liquid & gas pressure profiles, pump/compressor station siting, power
   cost/ economics/                                   (Phase 3)
   routing/      GIS least-cost alignment             (Phase 4)
   optimiser/    CAPEX+OPEX iteration loop            (Phase 5)
