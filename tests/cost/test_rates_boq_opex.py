@@ -76,13 +76,14 @@ def test_capex_hand_calc() -> None:
     assert amt["X70 SAWH 610x8.10 mm"] == pytest.approx(SEG.tonnes * 90_000 * 1.03 * 0.92)
     assert amt["3LPE external coating"] == pytest.approx(math.pi * 0.610 * 100_000 * 1000)
     assert amt["laying, hilly terrain"] == pytest.approx(od_in * 20 * 120_000 * 1.8)
-    assert amt["laying, flat terrain"] == pytest.approx(od_in * 80 * 120_000)
+    # 100 km - 20 km hilly - 0.6 km HDD = 79.4 km flat (HDD is not also laid open-cut)
+    assert amt["laying, flat terrain"] == pytest.approx(od_in * 79.4 * 120_000)
     assert amt["HDD crossings"] == pytest.approx(od_in * 600 * 2000)
     assert amt["national_highway crossings"] == 8e6
     assert amt["compressor stations (fixed)"] == 5e8
     assert amt["compressor power installed"] == pytest.approx(10_000 * 1.5 * 150_000)
     assert amt["right of use, forest"] == pytest.approx(5_000 * 20 / 1e4 * 1.5e6)
-    assert amt["right of use, agricultural"] == pytest.approx(95_000 * 20 / 1e4 * 3e5)
+    assert amt["right of use, agricultural"] == pytest.approx(94_400 * 20 / 1e4 * 3e5)
     # 100 km Class 1 -> ceil(100/32.187) - 1 = 3 SV stations
     assert amt["sectionalising valve stations"] == 3 * 1.5e7
     d, land = est.direct_excl_land, est.land
@@ -142,3 +143,22 @@ def test_annual_opex() -> None:
     assert o.total == pytest.approx(
         o.energy + o.line_om + o.station_om + o.manpower + o.inspection + o.insurance
     )
+
+
+def test_hdd_length_not_double_counted() -> None:
+    """Regression: HDD metres were also charged as flat laying and right of use."""
+    zero = StationQty(required_kw=0, count=0)
+    dry = capex_estimate(Service.GAS, [SEG], RouteQuantities(), zero, R)
+    wet = capex_estimate(Service.GAS, [SEG], RouteQuantities(hdd_m=5_000), zero, R)
+    d_amt = {i.description: i.amount for i in dry.items}
+    w_amt = {i.description: i.amount for i in wet.items}
+    od_in = 0.610 / 0.0254
+    assert d_amt["laying, flat terrain"] - w_amt["laying, flat terrain"] == pytest.approx(
+        od_in * 5 * 120_000
+    )
+    assert d_amt["right of use, agricultural"] - w_amt["right of use, agricultural"] == (
+        pytest.approx(5_000 * 20 / 1e4 * 3e5)
+    )
+    assert w_amt["HDD crossings"] == pytest.approx(od_in * 5_000 * 2000)
+    with pytest.raises(ValueError, match="HDD"):
+        capex_estimate(Service.GAS, [SEG], RouteQuantities(hdd_m=200_000), zero, R)

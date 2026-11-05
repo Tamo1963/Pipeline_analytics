@@ -324,7 +324,7 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **2c. PGD finite-element model** | Fault crossings, transverse PGD, settlement using the ALA soil springs | Agreement with published benchmark cases |
 | **3. Cost & economics** ✅ (placeholder rates) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity, end-to-end option evaluation | BOQ, OPEX, PV, IRR and tariff match hand calculations in tests; economic-diameter curve is U-shaped (interior optimum asserted). An independent spreadsheet reconciliation is still to do once project rates exist |
 | **4. Routing engine** ✅ | Cost surface from AOI layers, least-cost path, distinct alternatives, profile/crossing/class extraction, GeoJSON/KML export | On the synthetic sample AOI: ≥ 3 distinct corridors in ≈ 0.3 s; crossings match a manual count; exclusions respected; every corridor evaluated end to end. Real-data loading (OSM/DEM/WDPA) is still to do |
-| **5. Optimiser** (3–4 wk) | Inner enumeration/MILP, outer re-weighting loop, scenario tree, convergence | Converges on a test case; demonstrates a route change driven by OPEX |
+| **5. Optimiser** ✅ | Design search (diameter × grade × MAOP), route iteration loop with convergence, scenario tree, fixed-alignment studies, offtakes, declining supply pressure | Converges on the synthetic AOI; Bhola–Khulna test case run with sensitivities (`studies/bhola_khulna/REPORT.md`) |
 | **6. Feasibility Bot** (4 wk) | Agent, tool layer, prompts, study memory, guardrails, eval set of 30 benchmark queries | ≥ 90% of eval queries answered with tool-backed numbers and no fabricated values |
 | **7. Reports & UI** (3–4 wk) | Streamlit app (chat + map + scenario comparison), DOCX/XLSX report generator | End-to-end study from chat to report in one session |
 | **8. Hardening** | Monte Carlo, user cost-database management, auth, multi-user projects | — |
@@ -379,4 +379,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 4 complete (`docs/routing.md`, ADR 0007). Finding: a gross-climb penalty is physically wrong for packed lines (pressure is recovered on descent), so the router uses CAPEX + friction/O&M per metre, and elevation is judged by each corridor's full hydraulic and lifecycle evaluation.
 
-**Next step:** Phase 5, the optimiser: iterate corridor × diameter × MAOP × stations to the minimum lifecycle cost, with a scenario tree. Replace the placeholder rates as soon as project rates are available.
+* Phase 5 complete (`docs/optimiser.md`). Test case: Bhola → Barishal → Khulna gas evacuation (`studies/bhola_khulna/`).
+
+**Next step:** Phase 6, the feasibility bot: a conversational front end that collects the brief, runs these tools, and explains each iteration. Replace the placeholder rates as soon as project rates are available.

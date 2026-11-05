@@ -206,3 +206,38 @@ def test_option_input_json_round_trip() -> None:
     back = OptionInput.model_validate_json(inp.model_dump_json())
     assert back == inp
     assert math.isinf(back.gas_stations.max_discharge_pa_g)  # type: ignore[union-attr]
+
+
+def test_offtake_and_declining_supply_in_option() -> None:
+    from pipeline_analytics.hydraulics import Offtake
+
+    flat = Profile.flat(150e3, points=31)
+    base = GAS.model_copy(update={"profile": flat, "nps": 24, "throughput": (6.0,) * 20})
+    falling = tuple(70e5 - 2e5 * t for t in range(20))  # 70 -> 32 barg
+    r = evaluate_option(
+        OptionInput.model_validate(
+            {
+                **base.model_dump(),
+                "supply_pressure_by_year": falling,
+                "offtakes": [Offtake(chainage_m=60e3, share=0.3, min_pressure_pa_g=30e5)],
+            }
+        )
+    )
+    assert r.feasible
+    powers = [h.average_power_kw for h in r.hydraulics]
+    assert powers[-1] > powers[0]  # compression grows as the field pressure falls
+    with pytest.raises(ValueError):
+        evaluate_option(
+            OptionInput.model_validate(
+                {**base.model_dump(), "supply_pressure_by_year": (70e5,) * 5}
+            )
+        )
+
+
+def test_zero_throughput_years_cost_no_energy() -> None:
+    flat = Profile.flat(100e3, points=11)
+    r = evaluate_option(
+        GAS.model_copy(update={"profile": flat, "throughput": (6.0,) * 15 + (0.0,) * 5})
+    )
+    assert r.feasible
+    assert r.hydraulics[-1].average_power_kw == 0 and r.hydraulics[-1].fuel_gas_scm == 0

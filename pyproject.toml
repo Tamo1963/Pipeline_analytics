@@ -46,10 +46,14 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# Markdown report templates: table rows cannot be wrapped
+"studies/**/make_report.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src", "tests", "apps"]
+files = ["src", "tests", "apps", "studies"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]

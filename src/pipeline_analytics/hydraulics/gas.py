@@ -21,6 +21,7 @@ Compressor power (polytropic approximated as isentropic):
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import Field
@@ -28,7 +29,13 @@ from pydantic import Field
 from pipeline_analytics.core.units import magnitude_in
 from pipeline_analytics.hydraulics.fluids import R_UNIVERSAL, Gas, pipe_area, to_abs
 from pipeline_analytics.hydraulics.friction import darcy_friction, reynolds
-from pipeline_analytics.hydraulics.profile import Profile, per_point
+from pipeline_analytics.hydraulics.profile import (
+    Offtake,
+    Profile,
+    per_point,
+    segment_fractions,
+    with_points,
+)
 from pipeline_analytics.hydraulics.stations import (
     MarchResult,
     Station,
@@ -54,6 +61,7 @@ class GasLine:
         roughness_m: float = DEFAULT_ROUGHNESS_M,
         efficiency: float = 1.0,
         z_override: float | None = None,
+        flow_fraction: Sequence[float] | None = None,
     ) -> None:
         if not 0 < efficiency <= 1:
             raise ValueError("pipeline efficiency must be in (0, 1]")
@@ -62,8 +70,19 @@ class GasLine:
         self.gas = gas
         self.area = pipe_area(id_m)
         self.mass_flow = std_flow_m3_s * gas.std_density
+        """Inlet mass flow (kg/s)."""
+        nseg = len(profile.chainage_m) - 1
+        frac = tuple(flow_fraction) if flow_fraction is not None else (1.0,) * nseg
+        if len(frac) != nseg:
+            raise ValueError("flow_fraction needs one value per profile segment")
+        self.seg_mass = tuple(self.mass_flow * f for f in frac)
+        self.seg_friction = tuple(
+            darcy_friction(reynolds(m, id_m, gas.viscosity_pa_s), roughness_m / id_m)
+            / efficiency**2
+            for m in self.seg_mass
+        )
         self.re = reynolds(self.mass_flow, id_m, gas.viscosity_pa_s)
-        self.friction = darcy_friction(self.re, roughness_m / id_m) / efficiency**2
+        self.friction = self.seg_friction[0]
         self.z_override = z_override
 
     def z(self, p_abs: float) -> float:
@@ -81,8 +100,8 @@ class GasLine:
             s = 2 * G * m * dh / (z * R_UNIVERSAL * t)
             le = length * math.expm1(s) / s if abs(s) > 1e-12 else length
             rhs = (
-                self.friction
-                * self.mass_flow**2
+                self.seg_friction[k]
+                * self.seg_mass[k] ** 2
                 * z
                 * R_UNIVERSAL
                 * t
@@ -95,8 +114,10 @@ class GasLine:
             p2 = math.sqrt(val / math.exp(s))
         return p2
 
-    def velocity(self, p_abs: float) -> float:
-        return self.mass_flow / (self.gas.density(p_abs) * self.area)
+    def velocity(self, p_abs: float, k: int = 0) -> float:
+        """Velocity at point k, using the flow of the segment leaving it."""
+        m = self.seg_mass[min(k, len(self.seg_mass) - 1)]
+        return m / (self.gas.density(p_abs) * self.area)
 
 
 def compressor_power_w(
@@ -176,19 +197,34 @@ def gas_hydraulics(
     stations: GasStationInput,
     maop_pa_g: float | tuple[float, ...],
     gas: Gas | None = None,
+    offtakes: Sequence[Offtake] = (),
     **line_kw: Any,
 ) -> GasHydraulicsResult:
-    """Site compressor stations and compute pressures, velocities, power and fuel."""
+    """Site compressor stations and compute pressures, velocities, power and fuel.
+
+    ``offtakes`` take a share of the inlet flow part-way along the line and set a
+    minimum pressure there. They are inserted into the profile if needed (a
+    per-point ``maop_pa_g`` must then already include those points).
+    """
     gas = gas or Gas()
+    profile = with_points(profile, [o.chainage_m for o in offtakes])
     line = GasLine(
-        profile, magnitude_in(id_m, "m"), magnitude_in(std_flow, "m**3/s"), gas, **line_kw
+        profile,
+        magnitude_in(id_m, "m"),
+        magnitude_in(std_flow, "m**3/s"),
+        gas,
+        flow_fraction=segment_fractions(profile, offtakes),
+        **line_kw,
     )
     n = len(profile.chainage_m)
     maop = per_point(maop_pa_g, n, "maop_pa_g")
-    min_line = per_point(0.0, n, "min_line")
+    min_line = list(per_point(0.0, n, "min_line"))
+    for o in offtakes:
+        min_line[profile.chainage_m.index(o.chainage_m)] = o.min_pressure_pa_g
 
-    def power(s_abs: float, d_abs: float) -> float:
-        return compressor_power_w(line.mass_flow, s_abs, d_abs, gas, stations.compressor_efficiency)
+    def power(i: int, s_abs: float, d_abs: float) -> float:
+        m = line.seg_mass[min(i, n - 2)]
+        return compressor_power_w(m, s_abs, d_abs, gas, stations.compressor_efficiency)
 
     result = plan_stations(
         profile,
@@ -202,7 +238,7 @@ def gas_hydraulics(
         power=power,
         max_ratio=stations.max_ratio,
     )
-    vel = tuple(line.velocity(to_abs(p)) for p in result.pressure_pa_g)
+    vel = tuple(line.velocity(to_abs(p), k) for k, p in enumerate(result.pressure_pa_g))
     rho = [gas.density(to_abs(p)) for p in result.pressure_pa_g]
     erosional = min(API_14E_C_SI / math.sqrt(r) for r in rho)
     fuel = result.total_power_w / (stations.driver_efficiency * gas.lower_heating_value_j_kg)

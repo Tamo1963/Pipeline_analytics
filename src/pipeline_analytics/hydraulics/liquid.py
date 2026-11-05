@@ -13,6 +13,7 @@ line packed (no slack-line flow) over high points.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Any
 
 from pydantic import Field
@@ -21,7 +22,13 @@ from pipeline_analytics.core.units import as_quantity, magnitude_in
 from pipeline_analytics.hydraulics.fluids import Liquid, pipe_area, to_gauge
 from pipeline_analytics.hydraulics.friction import darcy_friction, reynolds
 from pipeline_analytics.hydraulics.gas import DEFAULT_ROUGHNESS_M
-from pipeline_analytics.hydraulics.profile import Profile, per_point
+from pipeline_analytics.hydraulics.profile import (
+    Offtake,
+    Profile,
+    per_point,
+    segment_fractions,
+    with_points,
+)
 from pipeline_analytics.hydraulics.stations import (
     MarchResult,
     Station,
@@ -48,25 +55,39 @@ class LiquidLine:
         flow_m3_s: float,
         liquid: Liquid,
         roughness_m: float = DEFAULT_ROUGHNESS_M,
+        flow_fraction: Sequence[float] | None = None,
     ) -> None:
         self.profile = profile
         self.id_m = id_m
         self.liquid = liquid
         self.flow = flow_m3_s
+        """Inlet volumetric flow (m^3/s)."""
         self.velocity = flow_m3_s / pipe_area(id_m)
         mass = flow_m3_s * liquid.density_kg_m3
         self.re = reynolds(mass, id_m, liquid.dynamic_viscosity_pa_s)
         self.friction = darcy_friction(self.re, roughness_m / id_m)
+        nseg = len(profile.chainage_m) - 1
+        frac = tuple(flow_fraction) if flow_fraction is not None else (1.0,) * nseg
+        if len(frac) != nseg:
+            raise ValueError("flow_fraction needs one value per profile segment")
+        self.seg_flow = tuple(flow_m3_s * f for f in frac)
+        rho, mu = liquid.density_kg_m3, liquid.dynamic_viscosity_pa_s
+        self.seg_gradient = tuple(
+            darcy_friction(reynolds(q * rho, id_m, mu), roughness_m / id_m)
+            / id_m * rho * (q / pipe_area(id_m)) ** 2 / 2
+            for q in self.seg_flow
+        )  # fmt: skip
 
     @property
     def friction_gradient_pa_m(self) -> float:
-        return self.friction / self.id_m * self.liquid.density_kg_m3 * self.velocity**2 / 2
+        """Friction pressure gradient at the inlet flow (Pa/m)."""
+        return self.seg_gradient[0]
 
     def step(self, p1: float, k: int) -> float:
         prof = self.profile
         length = prof.chainage_m[k + 1] - prof.chainage_m[k]
         dz = prof.elevation_m[k + 1] - prof.elevation_m[k]
-        p2 = p1 - self.liquid.density_kg_m3 * G * dz - self.friction_gradient_pa_m * length
+        p2 = p1 - self.liquid.density_kg_m3 * G * dz - self.seg_gradient[k] * length
         return p2 if p2 > 0 else math.nan
 
 
@@ -127,21 +148,34 @@ def liquid_hydraulics(
     stations: PumpStationInput,
     maop_pa_g: float | tuple[float, ...],
     liquid: Liquid | None = None,
+    offtakes: Sequence[Offtake] = (),
     **line_kw: Any,
 ) -> LiquidHydraulicsResult:
     """Site pump stations and compute the pressure profile and power."""
     liquid = liquid or Liquid()
+    profile = with_points(profile, [o.chainage_m for o in offtakes])
     line = LiquidLine(
-        profile, magnitude_in(id_m, "m"), volumetric_flow_m3_s(flow, liquid), liquid, **line_kw
+        profile,
+        magnitude_in(id_m, "m"),
+        volumetric_flow_m3_s(flow, liquid),
+        liquid,
+        flow_fraction=segment_fractions(profile, offtakes),
+        **line_kw,
     )
     n = len(profile.chainage_m)
     maop = per_point(maop_pa_g, n, "maop_pa_g")
     slack = to_gauge(liquid.vapour_pressure_pa_abs) + stations.slack_margin_pa
-    min_line = per_point(slack, n, "min_line")
+    min_line = list(per_point(slack, n, "min_line"))
+    for o in offtakes:
+        i = profile.chainage_m.index(o.chainage_m)
+        min_line[i] = max(slack, o.min_pressure_pa_g)
 
-    def power(s_abs: float, d_abs: float) -> float:
+    def power(i: int, s_abs: float, d_abs: float) -> float:
         return pump_power_w(
-            line.flow, d_abs - s_abs, stations.pump_efficiency, stations.motor_efficiency
+            line.seg_flow[min(i, n - 2)],
+            d_abs - s_abs,
+            stations.pump_efficiency,
+            stations.motor_efficiency,
         )
 
     result = plan_stations(

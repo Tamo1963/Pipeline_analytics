@@ -1,0 +1,133 @@
+# Bhola -> Barishal -> Khulna gas evacuation pipeline: Phase 5 test case.
+#
+# Sources:
+#   NOTE  = the client note (pipeline_note.docx)
+#   TBS   = The Business Standard, "Tk4,500cr pipeline planned to feed Bhola gas to
+#           energy-poor South" (GTCL proposal; Bapex reserve figures)
+#   ASSUMED = engineering assumption for this screening study; replace with survey/client data
+#
+# Costs use the PLACEHOLDER India 2026 unit rates (INR) as a regional proxy. They are
+# not Bangladesh market rates. Results are for comparing options, not for budgets.
+
+study:
+  title: "Bhola - Barishal - Khulna gas pipeline: screening optimisation"
+  jurisdiction: BD                       # ASME B31.8 basis (Bangladesh regulations to confirm)
+  inr_per_usd: 88.0                      # ASSUMED exchange rate for reporting
+  bdt_per_usd: 122.0                     # ASSUMED exchange rate for reporting
+
+reserves:                                # TBS (Bapex figures)
+  discovered_tcf: 2.047
+  recoverable_tcf: 1.432
+  produced_to_oct_2024_tcf: 0.176
+  island_local_use_mmscfd: 80            # NOTE: 445 MW power + CNG use 75-80 mmcfd
+  upside_total_tcf: 7.63                 # NOTE: "joint studies suggesting up to 7.63 Tcf" (unproven)
+
+gas:
+  throughput_mmscfd: 180                 # NOTE / TBS: unutilised capacity to evacuate
+  specific_gravity: 0.58                 # ASSUMED lean, dry gas
+  flowing_temperature_c: 28              # ASSUMED ground temperature in the delta
+
+pressures:
+  design_options_psig: [1000, 1440]      # ASSUMED ASME 600 / 900 class
+  supply_start_barg: 62.0                # ASSUMED junction pressure after cleaning/dehumidifying
+  supply_end_barg: 35.0                  # ASSUMED by end of plateau (field depletion)
+  khulna_min_barg: 40.0                  # ASSUMED national-grid entry pressure
+  barishal_share: 0.333                  # ASSUMED 60 of 180 mmcfd delivered at Barishal
+  barishal_min_barg: 25.0                # ASSUMED city-gate / power-plant pressure
+  compressor_min_suction_barg: 25.0
+  compressor_max_ratio: 1.6
+
+concession:                              # BOO
+  construction_years: 2                  # NOTE: phase 1 in 8-12 months, phase 2 in the next 12 months
+  capex_phasing: [0.45, 0.55]            # ASSUMED split by leg
+  operating_years: 19                    # TBS: 180 mmcfd "for the next 19 years"
+  discount_rate: 0.10                    # ASSUMED real
+  target_return: 0.12                    # ASSUMED post-tax equity return
+
+burial:                                  # ASSUMED deltaic soft clay, water table at surface
+  cover_m: 1.5
+  cohesion_kpa: 15
+  unit_weight_kn_m3: 17.5
+  modulus_of_soil_reaction_mpa: 1.4
+
+design_space:
+  sizes: ["16", "18", "20", "24", "26", "28", "30", "36"]
+  grades: ["X60", "X65", "X70"]
+
+alignments:
+  A_note:
+    description: "NOTE route: Bhola junction - Laharhat - Barishal (63 km), then Jhalokathi - Pirojpur - Bagerhat - Khulna (110 km)"
+    extra_terminals: 1                   # NOTE: cleaning and dehumidifying unit at the junction
+    legs:
+      - name: "Bhola - Laharhat - Barishal"
+        length_km: 63                    # NOTE
+        hdd_m: 6000                      # ASSUMED: Tetulia and its channels (crossing widths not surveyed)
+        narrow_river_crossings: 25       # ASSUMED khals, ~1 per 2.5 km
+        national_highways: 1
+        state_highways: 3
+        minor_roads: 20
+        marsh_fraction: 0.40             # ASSUMED flood plain / wet land
+        urban_fraction: 0.02
+        wasteland_fraction: 0.05         # ASSUMED chars / river banks
+        elevation_m: 3
+        towns:
+          - {name: Barishal, at_km: 63, class3_km: 3, class2_km: 2}
+        end_offtake_share: 0.333
+        end_offtake_min_barg: 25
+        end_name: Barishal
+      - name: "Barishal - Jhalokathi - Pirojpur - Bagerhat - Khulna"
+        length_km: 110                   # NOTE
+        hdd_m: 3000                      # ASSUMED: Sandhya, Kocha/Baleshwar, Rupsha crossings
+        narrow_river_crossings: 45
+        national_highways: 2
+        state_highways: 4
+        minor_roads: 35
+        railways: 1                      # ASSUMED Khulna - Mongla line
+        marsh_fraction: 0.30
+        urban_fraction: 0.03
+        wasteland_fraction: 0.03
+        elevation_m: 3
+        towns:
+          - {name: Jhalokathi, at_km: 18, class3_km: 1.5, class2_km: 1}
+          - {name: Pirojpur, at_km: 45, class3_km: 1.5, class2_km: 1}
+          - {name: Bagerhat, at_km: 85, class3_km: 1.5, class2_km: 1}
+          - {name: Khulna, at_km: 110, class3_km: 3, class2_km: 2}
+  B_gtcl:
+    description: "TBS / GTCL-CEGIS route: Shahbazpur - Bhola North - Ilisha - Mehendiganj - Hizla - Barishal (96 km), then Barishal - Khulna (109 km)"
+    extra_terminals: 1
+    legs:
+      - name: "Shahbazpur - Mehendiganj - Hizla - Barishal"
+        length_km: 96                    # TBS
+        hdd_m: 9000                      # ASSUMED: wide, erosion-prone Meghna/Tetulia branches (TBS)
+        narrow_river_crossings: 35
+        national_highways: 1
+        state_highways: 3
+        minor_roads: 25
+        marsh_fraction: 0.45
+        urban_fraction: 0.02
+        wasteland_fraction: 0.08
+        elevation_m: 3
+        towns:
+          - {name: Mehendiganj, at_km: 50, class3_km: 0, class2_km: 1}
+          - {name: Hizla, at_km: 72, class3_km: 0, class2_km: 1}
+          - {name: Barishal, at_km: 96, class3_km: 3, class2_km: 2}
+        end_offtake_share: 0.333
+        end_offtake_min_barg: 25
+        end_name: Barishal
+      - name: "Barishal - Khulna"
+        length_km: 109                   # TBS
+        hdd_m: 3000
+        narrow_river_crossings: 45
+        national_highways: 2
+        state_highways: 4
+        minor_roads: 35
+        railways: 1
+        marsh_fraction: 0.30
+        urban_fraction: 0.03
+        wasteland_fraction: 0.03
+        elevation_m: 3
+        towns:
+          - {name: Jhalokathi, at_km: 18, class3_km: 1.5, class2_km: 1}
+          - {name: Pirojpur, at_km: 45, class3_km: 1.5, class2_km: 1}
+          - {name: Bagerhat, at_km: 85, class3_km: 1.5, class2_km: 1}
+          - {name: Khulna, at_km: 109, class3_km: 3, class2_km: 2}

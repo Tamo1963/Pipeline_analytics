@@ -222,11 +222,17 @@ def capex_estimate(
             )
         )
 
-    # construction by terrain (unspecified length is flat)
+    # Construction by terrain. Unspecified length is flat, except HDD lengths:
+    # those are priced as HDD only (no open-cut laying, no right of use).
+    conventional = length - route.hdd_m
+    if conventional < -1e-6:
+        raise ValueError("HDD length exceeds the pipeline length")
     terrain = dict(route.terrain_m)
-    if sum(terrain.values()) > length + 1e-6:
-        raise ValueError("terrain lengths exceed the pipeline length")
-    terrain[Terrain.FLAT] = terrain.get(Terrain.FLAT, 0.0) + length - sum(terrain.values())
+    if sum(terrain.values()) > conventional + 1e-6:
+        raise ValueError("terrain lengths exceed the pipeline length less HDD")
+    terrain[Terrain.FLAT] = terrain.get(Terrain.FLAT, 0.0) + max(
+        0.0, conventional - sum(terrain.values())
+    )
     for t, m in terrain.items():
         if m > 0:
             items.append(
@@ -306,9 +312,11 @@ def capex_estimate(
 
     # right of use: ROW width x length by land use (unspecified = agricultural)
     land = dict(route.land_use_m)
-    if sum(land.values()) > length + 1e-6:
-        raise ValueError("land-use lengths exceed the pipeline length")
-    land[LandUse.AGRICULTURAL] = land.get(LandUse.AGRICULTURAL, 0.0) + length - sum(land.values())
+    if sum(land.values()) > conventional + 1e-6:
+        raise ValueError("land-use lengths exceed the pipeline length less HDD")
+    land[LandUse.AGRICULTURAL] = land.get(LandUse.AGRICULTURAL, 0.0) + max(
+        0.0, conventional - sum(land.values())
+    )
     for lu, m in land.items():
         if m > 0:
             items.append(

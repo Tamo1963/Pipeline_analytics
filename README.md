@@ -16,7 +16,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 2c | FE model for fault crossings, transverse PGD, settlement | planned |
 | 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
 | 4 | Route / alignment engine: see [`docs/routing.md`](docs/routing.md) | ✅ done |
-| 5 | Optimiser: route ↔ diameter ↔ hydraulics iteration | next |
+| 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
+| 6 | Feasibility bot | next |
 
 ## Development
 
@@ -52,9 +53,10 @@ src/pipeline_analytics/
   cost/         unit-rate sets (placeholder India 2026), BOQ, CAPEX, OPEX
   economics/    concession cash flows, LCC, tariff, IRR, sensitivity, economic-diameter curve
   routing/      AOI layers, cost surface, least-cost path, alternatives, extraction, GeoJSON/KML
-  optimiser/    CAPEX+OPEX iteration loop            (Phase 5)
+  optimiser/    design search, route iteration, scenario tree, fixed-alignment studies
   bot/          feasibility specialist bot           (Phase 6)
   reports/ api/                                      (Phase 7)
 apps/streamlit/ UI
+studies/       worked studies (Bhola - Khulna test case)
 data/           sample costs, sample GIS (later phases)
 ```

@@ -22,7 +22,7 @@ from pipeline_analytics.hydraulics.liquid import (
     liquid_pressure_profile,
     pump_power_w,
 )
-from pipeline_analytics.hydraulics.profile import Profile
+from pipeline_analytics.hydraulics.profile import Offtake, Profile
 from pipeline_analytics.hydraulics.stations import HydraulicsError, Station
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "HydraulicsError",
     "Liquid",
     "LiquidHydraulicsResult",
+    "Offtake",
     "Profile",
     "PumpStationInput",
     "Station",

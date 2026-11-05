@@ -51,7 +51,10 @@ def design_factor(
     """Hoop-stress design factor F."""
     if service is Service.LIQUID:
         return B31_4_DESIGN_FACTOR
-    if jurisdiction is Jurisdiction.INDIA and location_class is LocationClass.CLASS_1_DIV_1:
+    # Class 1 Division 1 (0.80) is withheld until confirmed for the jurisdiction.
+    if jurisdiction in (Jurisdiction.INDIA, Jurisdiction.BANGLADESH) and (
+        location_class is LocationClass.CLASS_1_DIV_1
+    ):
         location_class = LocationClass.CLASS_1_DIV_2
     return _B31_8_DESIGN_FACTOR[location_class]
 

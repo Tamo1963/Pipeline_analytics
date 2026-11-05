@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class Jurisdiction(StrEnum):
     INDIA = "IN"
+    BANGLADESH = "BD"
 
 
 class Service(StrEnum):
@@ -46,6 +47,15 @@ _CODE_BASIS: dict[tuple[Jurisdiction, Service], CodeBasis] = {
         service=Service.LIQUID,
         regulations=("PNGRB T4S Regulations for Petroleum and Petroleum Products Pipelines",),
         design_codes=("OISD-STD-141", "ASME B31.4"),
+    ),
+    (Jurisdiction.BANGLADESH, Service.GAS): CodeBasis(
+        jurisdiction=Jurisdiction.BANGLADESH,
+        service=Service.GAS,
+        regulations=(
+            "To confirm: Bangladesh Energy Regulatory Commission (BERC) and national gas "
+            "safety rules; GTCL / Petrobangla specifications",
+        ),
+        design_codes=("ASME B31.8",),
     ),
 }
 

@@ -28,7 +28,8 @@ from pipeline_analytics.hydraulics.profile import Profile
 from pipeline_analytics.mechanical.common import CheckResult, _Frozen
 
 Step = Callable[[float, int], float]
-PowerFn = Callable[[float, float], float]
+PowerFn = Callable[[int, float, float], float]
+"""(station point index, suction abs Pa, discharge abs Pa) -> W."""
 
 
 class HydraulicsError(ValueError):
@@ -175,7 +176,7 @@ def plan_stations(
                 f"station at {profile.chainage_m[start]:.0f} m cannot reach the required discharge"
             )
         boosts[start] = discharge
-        pw = power(to_abs(suction), to_abs(discharge)) if discharge > suction + 1 else 0.0
+        pw = power(start, to_abs(suction), to_abs(discharge)) if discharge > suction + 1 else 0.0
         if pw > 0:
             stations.append(
                 Station(

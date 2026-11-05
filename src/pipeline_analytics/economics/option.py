@@ -45,6 +45,7 @@ from pipeline_analytics.hydraulics import (
     GasStationInput,
     HydraulicsError,
     Liquid,
+    Offtake,
     Profile,
     PumpStationInput,
     gas_hydraulics,
@@ -91,6 +92,11 @@ class OptionInput(_Model):
     liquid: Liquid = Liquid()
     gas_stations: GasStationInput | None = None
     pump_stations: PumpStationInput | None = None
+    offtakes: tuple[Offtake, ...] = ()
+    """Intermediate deliveries (share of inlet flow, minimum pressure)."""
+    supply_pressure_by_year: tuple[float, ...] | None = None
+    """Inlet supply pressure (Pa gauge) per operating year, e.g. declining field pressure.
+    Overrides the station input's supply pressure."""
     compressor_driver: Literal["gas_turbine", "electric"] = "gas_turbine"
     electric_motor_efficiency: float = Field(default=0.95, gt=0, le=1)
     corrosion_allowance_m: float = Field(default=0.0, ge=0)
@@ -270,26 +276,43 @@ def evaluate_option(inp: OptionInput) -> OptionResult:
 
     # 3. hydraulics per year (thickest wall = smallest bore, conservative)
     id_m = od - 2 * max(w.wt_m for w in walls)
-    cache: dict[float, tuple[int, float, float]] = {}
+    cache: dict[tuple[float, float | None], tuple[int, float, float]] = {}
 
-    def run(flow: float) -> tuple[int, float, float]:
-        key = round(flow, 6)
+    def run(flow: float, supply: float | None) -> tuple[int, float, float]:
+        key = (round(flow, 6), None if supply is None else round(supply, 1))
+        if flow <= 0:
+            return (0, 0.0, 0.0)
         if key not in cache:
+            override: dict[str, float] = {"max_discharge_pa_g": inp.design_pressure_pa_g}
+            if supply is not None:
+                override["supply_pressure_pa_g"] = supply
             if inp.service is Service.GAS:
                 st_in = inp.gas_stations or GasStationInput(
                     supply_pressure_pa_g=40e5, delivery_min_pa_g=30e5
                 )
-                st_in = st_in.model_copy(update={"max_discharge_pa_g": inp.design_pressure_pa_g})
+                st_in = GasStationInput.model_validate({**st_in.model_dump(), **override})
                 r = gas_hydraulics(
-                    inp.profile, id_m, Q_(flow, "MMSCMD"), st_in, inp.design_pressure_pa_g, inp.gas
+                    inp.profile,
+                    id_m,
+                    Q_(flow, "MMSCMD"),
+                    st_in,
+                    inp.design_pressure_pa_g,
+                    inp.gas,
+                    offtakes=inp.offtakes,
                 )
                 fails = [ch.name for ch in r.checks if not ch.passed]
                 cache[key] = (len(r.stations), r.total_power_w, r.fuel_gas_kg_s)
             else:
                 pst = inp.pump_stations or PumpStationInput()
-                pst = pst.model_copy(update={"max_discharge_pa_g": inp.design_pressure_pa_g})
+                pst = PumpStationInput.model_validate({**pst.model_dump(), **override})
                 lr = liquid_hydraulics(
-                    inp.profile, id_m, Q_(flow, "MMTPA"), pst, inp.design_pressure_pa_g, inp.liquid
+                    inp.profile,
+                    id_m,
+                    Q_(flow, "MMTPA"),
+                    pst,
+                    inp.design_pressure_pa_g,
+                    inp.liquid,
+                    offtakes=inp.offtakes,
                 )
                 fails = [ch.name for ch in lr.checks if not ch.passed]
                 cache[key] = (len(lr.stations), lr.total_power_w, 0.0)
@@ -297,11 +320,19 @@ def evaluate_option(inp: OptionInput) -> OptionResult:
                 raise HydraulicsError(f"{flow:g}: fails {', '.join(fails)}")
         return cache[key]
 
+    supplies: tuple[float | None, ...] = (
+        inp.supply_pressure_by_year
+        if inp.supply_pressure_by_year is not None
+        else (None,) * len(inp.throughput)
+    )
+    if len(supplies) != len(inp.throughput):
+        raise ValueError("supply_pressure_by_year needs one value per operating year")
+
     years: list[YearHydraulics] = []
     try:
-        for t, q in enumerate(inp.throughput, start=1):
-            n, peak_w, _ = run(q / inp.load_factor)
-            _, avg_w, avg_fuel = run(q)
+        for t, (q, sup) in enumerate(zip(inp.throughput, supplies, strict=True), start=1):
+            n, peak_w, _ = run(q / inp.load_factor, sup)
+            _, avg_w, avg_fuel = run(q, sup)
             if inp.service is Service.LIQUID:  # pump power is already electrical input
                 kwh, scm = avg_w / 1000 * HOURS_PER_YEAR, 0.0
             elif inp.compressor_driver == "gas_turbine":

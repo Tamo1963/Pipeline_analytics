@@ -81,3 +81,16 @@ def test_infeasible() -> None:
 def test_velocity_check() -> None:
     r = liquid_hydraulics(Profile.flat(10e3), 0.2, 0.15, PumpStationInput(), 150e5, LIQ)
     assert not r.checks[-1].passed
+
+
+def test_liquid_offtake_hand_calc() -> None:
+    from pipeline_analytics.hydraulics import Offtake
+    from pipeline_analytics.hydraulics.liquid import LiquidLine
+    from pipeline_analytics.hydraulics.profile import segment_fractions
+
+    prof = Profile(chainage_m=(0, 10e3, 20e3), elevation_m=(0, 0, 0))
+    offs = [Offtake(chainage_m=10e3, share=0.5)]
+    line = LiquidLine(prof, 0.4, 0.2, LIQ, flow_fraction=segment_fractions(prof, offs))
+    full = LiquidLine(prof, 0.4, 0.1, LIQ)  # the downstream half on its own
+    p1 = line.step(60e5, 0)
+    assert line.step(p1, 1) == pytest.approx(p1 - full.friction_gradient_pa_m * 10e3)

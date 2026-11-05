@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from pipeline_analytics.mechanical.common import _Frozen, interp
 
@@ -54,3 +54,37 @@ def per_point(value: float | Sequence[float], n: int, name: str) -> tuple[float,
     if len(out) != n:
         raise ValueError(f"{name}: expected {n} values, got {len(out)}")
     return out
+
+
+class Offtake(_Frozen):
+    """Gas or liquid delivered part-way along the line (e.g. a city-gate station)."""
+
+    chainage_m: float = Field(gt=0)
+    share: float = Field(gt=0, lt=1, description="fraction of the inlet flow taken off here")
+    min_pressure_pa_g: float = Field(default=0.0, description="minimum pressure at the offtake")
+    name: str = ""
+
+
+def with_points(profile: Profile, chainages: Sequence[float]) -> Profile:
+    """``profile`` with extra points (elevation interpolated) at ``chainages``."""
+    extra = [c for c in chainages if 0 < c < profile.length_m and c not in profile.chainage_m]
+    if not extra:
+        return profile
+    xs = sorted(set(profile.chainage_m) | set(extra))
+    return Profile(
+        chainage_m=tuple(xs),
+        elevation_m=tuple(interp(x, profile.chainage_m, profile.elevation_m) for x in xs),
+    )
+
+
+def segment_fractions(profile: Profile, offtakes: Sequence[Offtake]) -> tuple[float, ...]:
+    """Fraction of the inlet flow in each segment k (point k to k+1) after upstream offtakes."""
+    if sum(o.share for o in offtakes) >= 1:
+        raise ValueError("offtake shares must leave flow for the end delivery point")
+    for o in offtakes:
+        if o.chainage_m not in profile.chainage_m or o.chainage_m >= profile.length_m:
+            raise ValueError(f"offtake at {o.chainage_m} m is not an interior profile point")
+    out = []
+    for x in profile.chainage_m[:-1]:
+        out.append(1.0 - sum(o.share for o in offtakes if o.chainage_m <= x))
+    return tuple(out)

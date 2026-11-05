@@ -171,3 +171,45 @@ def test_lower_maop_segment_caps_pressure() -> None:
     assert len(maop) == n
     assert all(p <= m + 1 for p, m in zip(r.march.pressure_pa_g, maop, strict=True))
     assert r.checks[0].passed
+
+
+def test_offtake_reduces_downstream_flow_and_sets_minimum() -> None:
+    from pipeline_analytics.hydraulics import Offtake
+
+    prof = Profile.flat(150e3, points=16)
+    stations = GasStationInput(supply_pressure_pa_g=60e5, delivery_min_pa_g=30e5)
+    full = gas_hydraulics(prof, ID, Q_(10, "MMSCMD"), stations, 92e5)
+    off = gas_hydraulics(
+        prof,
+        ID,
+        Q_(10, "MMSCMD"),
+        stations,
+        92e5,
+        offtakes=[Offtake(chainage_m=63_000, share=0.4, min_pressure_pa_g=45e5, name="Barishal")],
+    )
+    i = off.march.chainage_m.index(63_000)  # offtake point inserted into the profile
+    assert off.march.pressure_pa_g[i] >= 45e5 - 1  # offtake minimum enforced
+    # with 40 % taken off part-way, less compression is needed (here none at all)
+    assert full.stations and full.total_power_w > 0
+    assert off.total_power_w < full.total_power_w
+    assert off.march.delivery_pressure_pa_g >= 30e5 - 1
+    # downstream velocity reflects the reduced flow
+    assert off.velocity_m_s[-1] < full.velocity_m_s[-1]
+
+
+def test_offtake_validation() -> None:
+    from pipeline_analytics.hydraulics import Offtake
+    from pipeline_analytics.hydraulics.profile import segment_fractions, with_points
+
+    prof = with_points(Profile.flat(100e3), [30e3, 60e3])
+    assert prof.chainage_m == (0, 30e3, 60e3, 100e3)
+    fr = segment_fractions(
+        prof, [Offtake(chainage_m=30e3, share=0.2), Offtake(chainage_m=60e3, share=0.3)]
+    )
+    assert fr == pytest.approx((1.0, 0.8, 0.5))
+    with pytest.raises(ValueError):
+        segment_fractions(
+            prof, [Offtake(chainage_m=30e3, share=0.6), Offtake(chainage_m=60e3, share=0.5)]
+        )
+    with pytest.raises(ValueError):
+        segment_fractions(prof, [Offtake(chainage_m=45e3, share=0.2)])
