@@ -15,7 +15,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 2b | Class location and liquid/gas hydraulics with station siting: see [`docs/hydraulics-class-location.md`](docs/hydraulics-class-location.md) | ✅ done |
 | 2c | FE model for fault crossings, transverse PGD, settlement | planned |
 | 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
-| 4 | Route / alignment engine (GIS) | next |
+| 4 | Route / alignment engine: see [`docs/routing.md`](docs/routing.md) | ✅ done |
+| 5 | Optimiser: route ↔ diameter ↔ hydraulics iteration | next |
 
 ## Development
 
@@ -50,7 +51,7 @@ src/pipeline_analytics/
   hydraulics/   liquid & gas pressure profiles, pump/compressor station siting, power
   cost/         unit-rate sets (placeholder India 2026), BOQ, CAPEX, OPEX
   economics/    concession cash flows, LCC, tariff, IRR, sensitivity, economic-diameter curve
-  routing/      GIS least-cost alignment             (Phase 4)
+  routing/      AOI layers, cost surface, least-cost path, alternatives, extraction, GeoJSON/KML
   optimiser/    CAPEX+OPEX iteration loop            (Phase 5)
   bot/          feasibility specialist bot           (Phase 6)
   reports/ api/                                      (Phase 7)

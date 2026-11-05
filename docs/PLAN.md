@@ -226,7 +226,9 @@ Each raster cell (e.g. 30 m) gets a **composite cost per metre**. Wherever possi
 
 ### 5.3 Why routing must be iterated with hydraulics
 
-The least-cost *construction* path is not necessarily the least-cost *lifecycle* path. A shorter route over hills can need more pump or compressor power (elevation head, more stations) every year of the concession. The optimiser therefore re-weights the cost surface with an **OPEX-equivalent penalty** (PV of energy per metre of elevation gain and per metre of length) and re-routes.
+The least-cost *construction* path is not necessarily the least-cost *lifecycle* path. Length costs friction energy and O&M every year of the concession, so the cost surface carries an **OPEX-equivalent penalty per metre of length** (PV of friction energy + line O&M).
+
+*Correction (Phase 4, ADR 0007):* this section originally also proposed a penalty per metre of elevation gain. In a packed line the pressure spent climbing is recovered on descent, so energy depends on net elevation change, which is the same for every route between fixed end points. Elevation therefore affects routing through terrain cost (slope), and through high points that set pump discharge (liquid slack-line). Those are judged by each corridor's full hydraulic and lifecycle evaluation, and the optimiser iterates on that.
 
 ---
 
@@ -321,7 +323,7 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **2b. Class location & hydraulics** ✅ | Location class (B31.8 840.2 / T4S), MAOP along route, liquid & gas hydraulics, station siting, power and fuel | Gas flow equation matches numerical integration within 0.01%; all formulas hand-checked |
 | **2c. PGD finite-element model** | Fault crossings, transverse PGD, settlement using the ALA soil springs | Agreement with published benchmark cases |
 | **3. Cost & economics** ✅ (placeholder rates) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity, end-to-end option evaluation | BOQ, OPEX, PV, IRR and tariff match hand calculations in tests; economic-diameter curve is U-shaped (interior optimum asserted). An independent spreadsheet reconciliation is still to do once project rates exist |
-| **4. Routing engine** (5–6 wk) | Cost-surface builder from open data, least-cost path, k-alternatives, profile/crossing/class extraction, KML export | On a sample AOI, produces 3+ distinct corridors in < 2 min; crossings counted correctly against manual check |
+| **4. Routing engine** ✅ | Cost surface from AOI layers, least-cost path, distinct alternatives, profile/crossing/class extraction, GeoJSON/KML export | On the synthetic sample AOI: ≥ 3 distinct corridors in ≈ 0.3 s; crossings match a manual count; exclusions respected; every corridor evaluated end to end. Real-data loading (OSM/DEM/WDPA) is still to do |
 | **5. Optimiser** (3–4 wk) | Inner enumeration/MILP, outer re-weighting loop, scenario tree, convergence | Converges on a test case; demonstrates a route change driven by OPEX |
 | **6. Feasibility Bot** (4 wk) | Agent, tool layer, prompts, study memory, guardrails, eval set of 30 benchmark queries | ≥ 90% of eval queries answered with tool-backed numbers and no fabricated values |
 | **7. Reports & UI** (3–4 wk) | Streamlit app (chat + map + scenario comparison), DOCX/XLSX report generator | End-to-end study from chat to report in one session |
@@ -375,4 +377,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 3 complete with **placeholder rates** (`docs/cost-economics.md`, ADR 0006): CAPEX/OPEX, concession cash flows, LCC, levelised cost, post-tax tariff, tornado, and the end-to-end economic-diameter curve.
 
-**Next step:** Phase 4, the route / alignment engine (GIS cost surface, least-cost path, alternative corridors), so route quantities come from the alignment instead of being entered by hand. Replace the placeholder rates as soon as project rates are available.
+* Phase 4 complete (`docs/routing.md`, ADR 0007). Finding: a gross-climb penalty is physically wrong for packed lines (pressure is recovered on descent), so the router uses CAPEX + friction/O&M per metre, and elevation is judged by each corridor's full hydraulic and lifecycle evaluation.
+
+**Next step:** Phase 5, the optimiser: iterate corridor × diameter × MAOP × stations to the minimum lifecycle cost, with a scenario tree. Replace the placeholder rates as soon as project rates are available.

@@ -5,6 +5,7 @@ Run with:  uv run streamlit run apps/streamlit/app.py
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -24,6 +25,7 @@ from pipeline_analytics.economics import (
     OptionResult,
     best_option,
     economic_diameter_curve,
+    evaluate_option,
     option_tornado,
     ramp_profile,
 )
@@ -49,13 +51,31 @@ from pipeline_analytics.mechanical import (
     pipe_from_library,
 )
 from pipeline_analytics.pipespec import WtPolicy, default_library
+from pipeline_analytics.routing import (
+    CostSurfaceParams,
+    alternative_corridors,
+    build_cost_surface,
+    extract_route,
+    opex_penalties,
+    smooth_path_polyline,
+    to_geojson,
+    to_kml,
+)
+from pipeline_analytics.routing import sample as route_sample
 
 st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
-basis_tab, library_tab, mech_tab, hyd_tab, econ_tab = st.tabs(
-    ["Study basis", "Pipe library", "Mechanical (ALA)", "Class location & hydraulics", "Economics"]
+basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab = st.tabs(
+    [
+        "Study basis",
+        "Pipe library",
+        "Mechanical (ALA)",
+        "Class location & hydraulics",
+        "Economics",
+        "Route",
+    ]
 )
 
 # --------------------------------------------------------------------- basis
@@ -580,3 +600,101 @@ with econ_tab:
                 ],
                 hide_index=True,
             )
+
+# ---------------------------------------------------------------------- route
+_COLOURS = [(230, 57, 70), (29, 120, 255), (46, 160, 67), (245, 159, 0), (160, 70, 200)]
+
+
+@st.cache_data(show_spinner="Routing...")
+def _route(nps: str, pressure_barg: float, k: int, base_json: str) -> tuple:  # type: ignore[type-arg]
+    aoi = route_sample.sample_aoi()
+    base_inp = OptionInput.model_validate_json(base_json)
+    pen = opex_penalties(base_inp)
+    surf = build_cost_surface(
+        aoi,
+        CostSurfaceParams(
+            service=Service.GAS,
+            nps=nps,
+            design_pressure_pa_g=pressure_barg * 1e5,
+            length_per_m=pen.length_per_m,
+        ),
+    )
+    alts = alternative_corridors(surf, route_sample.START, route_sample.END, k=k)
+    exs = [extract_route(surf, smooth_path_polyline(surf, a.cells)) for a in alts]
+    res = [evaluate_option(ex.option_input(base_inp)) for ex in exs]
+    # picture: log cost in grey, excluded in dark red, water blue, corridors in colour
+    cost = surf.cell_cost
+    finite = np.isfinite(cost)
+    lg = np.log(np.where(finite, cost, np.nan))
+    lo, hi = np.nanmin(lg), np.nanmax(lg)
+    grey = np.where(finite, 230 - 150 * (lg - lo) / max(hi - lo, 1e-9), 0).astype(np.uint8)
+    img = np.stack([grey, grey, grey], axis=-1)
+    img[~finite] = (90, 20, 30)
+    img[aoi.layer("water")] = (120, 170, 230)
+    for i, a in enumerate(alts):
+        for r, c in a.cells:
+            img[r, c] = _COLOURS[i % len(_COLOURS)]
+    img = np.kron(img, np.ones((2, 2, 1), dtype=np.uint8))
+    return surf.grid.crs, alts, exs, res, img
+
+
+with route_tab:
+    st.caption(
+        "Least-cost routing on a SYNTHETIC 40 x 24 km sample area (ridge with a northern saddle, "
+        "protected forest, 400 m river, highways, railway, town, wetland, fault zone). "
+        "Cell costs use the same unit rates as the Economics tab. Real areas: load a DEM, "
+        "land cover and GeoJSON features (see docs/routing.md)."
+    )
+    if placeholder_rates().placeholder:
+        st.warning("Placeholder unit rates: compare corridors relative to each other only.")
+    r1, r2, r3 = st.columns(3)
+    r_nps = r1.selectbox("NPS", ["20", "24", "28", "30", "36"], index=3, key="r_nps")
+    r_p = r2.number_input("Design pressure (barg)", value=92.0, min_value=10.0, key="r_p")
+    r_k = r3.number_input("Alternative corridors", value=4, min_value=1, max_value=5, key="r_k")
+    r_base = OptionInput(
+        service=Service.GAS,
+        nps=r_nps,
+        design_pressure_pa_g=r_p * 1e5,
+        profile=Profile.flat(38e3),
+        throughput=ramp_profile(6, 10, 8, 25),
+        gas_stations=GasStationInput(supply_pressure_pa_g=60e5, delivery_min_pa_g=30e5),
+    )
+    try:
+        crs, alts, exs, res, img = _route(r_nps, r_p, int(r_k), r_base.model_dump_json())
+    except ValueError as e:
+        st.error(str(e))
+    else:
+        st.image(img, caption="Cost surface (darker = dearer), corridors C1..Cn in colour")
+        st.dataframe(
+            [
+                {
+                    "Corridor": f"C{i + 1}",
+                    "Length km": round(ex.length_m / 1000, 1),
+                    "Max elevation m": round(max(ex.profile.elevation_m)),
+                    "Crossings": ", ".join(f"{k} {v}" for k, v in ex.crossings.items()),
+                    "HDD m": round(ex.hdd_m),
+                    "Fault zone m": round(ex.hazard_m.get(3, 0.0)),
+                    "Class 2+ m": round(
+                        sum(
+                            sg.length_m
+                            for sg in ex.class_segments
+                            if sg.location_class.value != "1-2"
+                        )
+                    ),
+                    "Route cost ₹ cr": round(crore(a.cost)),
+                    "LCC ₹ cr": round(crore(r.lcc_pv)) if r.feasible else None,
+                }
+                for i, (a, ex, r) in enumerate(zip(alts, exs, res, strict=True))
+            ],
+            hide_index=True,
+        )
+        items = [
+            (f"C{i + 1}", ex.polyline, {"length_km": round(ex.length_m / 1000, 2)})
+            for i, ex in enumerate(exs)
+        ]
+        d1, d2 = st.columns(2)
+        d1.download_button("Download GeoJSON", to_geojson(items, crs), "corridors.geojson")
+        try:
+            d2.download_button("Download KML", to_kml(items, crs), "corridors.kml")
+        except ImportError:
+            d2.info("Install the 'gis' extra for KML export")

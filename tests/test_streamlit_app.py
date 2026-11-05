@@ -80,3 +80,10 @@ def test_economics_tab_renders_with_placeholder_warning() -> None:
     assert any("PLACEHOLDER unit rates" in w.value for w in at.warning)
     best = next(m for m in at.metric if m.label == "Lowest lifecycle cost")
     assert best.value.endswith('"')
+
+
+def test_route_tab_finds_corridors() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=90).run()
+    assert not at.exception
+    assert not [e.value for e in at.error]
+    assert len(at.dataframe) >= 1
