@@ -270,6 +270,7 @@ class PipeSoilModel:
         *,
         initial_axial_stress_pa: float = 0.0,
         options: FeOptions | None = None,
+        spring_scale: np.ndarray | None = None,
     ) -> None:
         self.pipe, self.springs, self.steel = pipe, springs, steel
         self.opt = options or FeOptions()
@@ -282,6 +283,10 @@ class PipeSoilModel:
         trib = np.zeros(self.nn)
         trib[:-1] += self.le / 2
         trib[1:] += self.le / 2
+        if spring_scale is not None:
+            if np.shape(spring_scale) != (self.nn,) or np.any(np.asarray(spring_scale) <= 0):
+                raise ValueError("spring_scale needs one positive factor per node")
+            trib = trib * np.asarray(spring_scale, dtype=float)
         self.trib = trib
         # fibers: ring radius giving the exact tube second moment
         ro, ri = pipe.od_m / 2, pipe.id_m / 2

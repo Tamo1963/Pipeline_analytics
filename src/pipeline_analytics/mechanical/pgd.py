@@ -20,12 +20,13 @@ fault-crossing angle with the lowest strain utilisation.
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Sequence
 from typing import Any, Literal
 
 import numpy as np
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from pipeline_analytics.core.units import magnitude_in
 from pipeline_analytics.mechanical.common import CheckResult, PipeSection, _Frozen
@@ -50,12 +51,26 @@ from pipeline_analytics.mechanical.soil import SoilSprings
 class GroundMovement(_Frozen):
     """Ground displacement field along the pipe (x = 0 at the fault or zone centre)."""
 
-    kind: Literal["fault", "block", "cosine"]
+    kind: Literal["fault", "block", "cosine", "table"]
     axial_m: float = 0.0
     transverse_m: float = 0.0
     vertical_m: float = Field(default=0.0, description="positive = up")
     width_m: float = Field(default=0.0, ge=0, description="zone width for block / cosine")
     label: str = ""
+    profile_x_m: tuple[float, ...] = ()
+    """table: positions along the pipe (x = 0 at the zone reference point)."""
+    profile_scale: tuple[float, ...] = ()
+    """table: share of the movement at each position (linear between, 0 outside)."""
+
+    @model_validator(mode="after")
+    def _check_table(self) -> GroundMovement:
+        if self.kind == "table":
+            xs = self.profile_x_m
+            if len(xs) < 2 or len(xs) != len(self.profile_scale):
+                raise ValueError("table movement needs matching profile_x_m / profile_scale")
+            if any(b <= a for a, b in itertools.pairwise(xs)):
+                raise ValueError("profile_x_m must increase")
+        return self
 
     def field(self) -> GroundField:
         comp = np.array([self.axial_m, self.transverse_m, self.vertical_m])[:, None]
@@ -64,6 +79,9 @@ class GroundMovement(_Frozen):
             return lambda x: comp * (0.5 * np.sign(x))[None, :]
         if self.kind == "block":
             return lambda x: comp * (np.abs(x) <= half).astype(float)[None, :]
+        if self.kind == "table":
+            xs, fr = np.array(self.profile_x_m), np.array(self.profile_scale)
+            return lambda x: comp * np.interp(x, xs, fr, left=0.0, right=0.0)[None, :]
         return lambda x: (
             comp
             * np.where(np.abs(x) <= half, 0.5 * (1 + np.cos(math.pi * x / max(half, 1e-9))), 0.0)[
@@ -81,10 +99,15 @@ class GroundMovement(_Frozen):
         h = self.width_m / 2
         if self.kind == "block":
             return [-h, h]
+        if self.kind == "table":
+            xs = self.profile_x_m
+            return sorted({xs[0], xs[-1], *([0.0] if xs[0] <= 0 <= xs[-1] else [])})
         return list(np.linspace(-h, h, 9))
 
     def fine_half_width(self, od_m: float) -> float:
         base = max(20 * od_m, 10.0)
+        if self.kind == "table":
+            return base
         if self.kind == "cosine":
             return min(base, self.width_m / 16 + 2 * od_m)
         return base
@@ -149,6 +172,70 @@ def settlement(
                           label=f"settlement {abs(d):g} m over {width_m:g} m")  # fmt: skip
 
 
+def lateral_spread_movement(
+    spread: Any,
+    skew_deg: float = 0.0,
+    *,
+    hdd_setback_m: float = 0.0,
+    transition_m: float = 0.0,
+    label: str = "",
+) -> GroundMovement:
+    """Ground movement for a pipe leaving a river crossing through a spreading bank.
+
+    ``spread`` is a ``geotech.LateralSpread`` behind a free face. The pipe runs
+    inland along +x, at ``skew_deg`` to the bank normal (0 = square to the bank).
+    The ground moves towards the river, so mostly along the pipe, decaying inland
+    as the spread profile does (distance from the toe = setback + x cos(skew)).
+
+    * ``hdd_setback_m``: distance from the toe to where the pipe leaves the HDD and
+      becomes shallow (x = 0 there). Before it, the pipe is below the liquefiable
+      layer and the ground is taken as stable.
+    * ``transition_m``: length over which the HDD pipe climbs through the
+      liquefiable layer. The movement ramps up over it instead of acting as an
+      abrupt step. 0 is conservative.
+    """
+    if not 0 <= skew_deg < 80:
+        raise ValueError("skew must be 0-80 deg; use parallel_spread_movement along a bank")
+    d0 = spread.displacement_at(hdd_setback_m)
+    if d0 <= 0:
+        raise ValueError("no lateral spread at the HDD exit")
+    c = math.cos(math.radians(skew_deg))
+    xs: list[float] = [-transition_m] if transition_m > 0 else []
+    sc: list[float] = [0.0] if transition_m > 0 else []
+    xs.append(0.0)
+    sc.append(1.0)
+    for pt in spread.profile:
+        if pt.distance_m > hdd_setback_m:
+            xs.append((pt.distance_m - hdd_setback_m) / c)
+            sc.append(pt.displacement_m / d0)
+    return GroundMovement(
+        kind="table",
+        axial_m=-d0 * c,
+        transverse_m=d0 * math.sin(math.radians(skew_deg)),
+        profile_x_m=tuple(xs),
+        profile_scale=tuple(sc),
+        width_m=xs[-1],
+        label=label
+        or f"lateral spread {d0:.2f} m at the HDD exit ({hdd_setback_m:g} m from "
+        f"the bank), pipe at {skew_deg:g} deg to the bank normal",
+    )
+
+
+def parallel_spread_movement(
+    spread: Any, distance_from_toe_m: float, length_along_bank_m: float
+) -> GroundMovement:
+    """A pipe running along a spreading bank, ``distance_from_toe_m`` inland: the ground
+    moves across the pipe over ``length_along_bank_m`` (block with the local D_H)."""
+    d = spread.displacement_at(distance_from_toe_m)
+    if d <= 0:
+        raise ValueError("no lateral spread at that distance from the bank")
+    return GroundMovement(
+        kind="block", transverse_m=d, width_m=length_along_bank_m,
+        label=f"lateral spread {d:.2f} m across the pipe, {distance_from_toe_m:g} m from "
+        f"the bank, over {length_along_bank_m:g} m",
+    )  # fmt: skip
+
+
 def longitudinal_pgd(displacement_m: float, block_length_m: float) -> GroundMovement:
     return GroundMovement(kind="block", axial_m=displacement_m, width_m=block_length_m,
                           label=f"longitudinal PGD {displacement_m:g} m, block "
@@ -199,26 +286,38 @@ def analyse_pgd(
     initial_axial_stress: Any = 0.0,
     half_length_m: float | None = None,
     options: FeOptions | None = None,
+    moving_ground_spring_factor: float = 1.0,
 ) -> PgdAnalysis:
     """Run the FE model for one ground movement and check ALA strain limits.
 
     ``pressure`` (internal, gauge) enters the compressive strain limit;
     ``initial_axial_stress`` (e.g. restrained thermal + Poisson stress,
     compression negative) is applied before the ground moves.
+    ``moving_ground_spring_factor`` scales all springs where the ground moves,
+    e.g. 0.1 for liquefied soil. The default 1.0 keeps full non-liquefied springs,
+    which forces the pipe to follow the ground: an upper bound on strain.
     """
     sp_ = _springs(springs)
     curve = steel or SteelCurve.for_grade(grade, pipe.smys_pa, pipe.steel.youngs_modulus_pa)
     d = pipe.od_m
-    reach = movement.width_m / 2 if movement.kind != "fault" else 0.0
+    if movement.kind == "table":
+        reach = max(abs(movement.profile_x_m[0]), abs(movement.profile_x_m[-1]))
+    else:
+        reach = movement.width_m / 2 if movement.kind != "fault" else 0.0
     half = half_length_m or max(300.0, 100 * d) + reach
     h_fine = min(max(d / 2, 0.1), 0.5)
     if movement.kind == "cosine":
         h_fine = max(h_fine, movement.width_m / 400)
     x = graded_mesh(-half, half, movement.refine_points(), h_fine, 10.0,
                     movement.fine_half_width(d))  # fmt: skip
+    scale = None
+    if moving_ground_spring_factor != 1.0:
+        g = movement.field()(x)
+        scale = np.where(np.abs(g).max(axis=0) > 1e-9, moving_ground_spring_factor, 1.0)
     model = PipeSoilModel(
         pipe, sp_, curve, x,
         initial_axial_stress_pa=magnitude_in(initial_axial_stress, "Pa"), options=options,
+        spring_scale=scale,
     )  # fmt: skip
     fe = model.solve(movement.field())
     lim = limits or StrainLimits()

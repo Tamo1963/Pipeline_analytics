@@ -70,10 +70,12 @@ def main() -> None:
     search = optimise_design(inp, space, workers=args.workers)
     sizes = {n: ir for n, ir in rs.per_size(search).items() if ir[1].feasible}
     basis = _basis_of(inp)
-    usd = lambda inr: round(rs.usd_m(inr, case), 2)  # noqa: E731
+
+    def usd(inr: float) -> float:
+        return round(float(rs.usd_m(inr, case)), 2)
 
     def class1_wall(res: Any) -> float:
-        return min(w.wt_m for w in res.walls)
+        return float(min(w.wt_m for w in res.walls))
 
     out: dict[str, Any] = {
         "location": f"leg {LEG + 1} km {AT_KM:g} (Class 1)",
