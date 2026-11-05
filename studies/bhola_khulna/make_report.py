@@ -36,6 +36,26 @@ def size_table(by_size: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def fault_md() -> str:
+    """Short what-if section if fault_case.py has been run."""
+    f = HERE / "results" / "fault_case.json"
+    if not f.exists():
+        return ""
+    return """
+
+## 7a. What-if: a fault crossing
+
+No mapped active fault crosses this corridor. A hypothetical strike-slip fault on the
+Barishal - Khulna leg (km 60) was tested with the pipe-soil FE model
+([FAULT_CASE.md](FAULT_CASE.md)):
+* **Strike-slip:** crossing at 60-90° to the strike keeps 24" X65 within the strain limits
+  for up to 2 m of slip. Crossings that compress the pipe fail.
+* **Reverse fault:** a 1 m reverse fault fails every size at a 90° crossing.
+* **Sizing:** the optimum diameter does not change. A fault is a question of crossing
+  design and route.
+"""
+
+
 def risk_bullet(risk: dict[str, Any] | None) -> str:
     if not risk:
         return ""
@@ -182,6 +202,7 @@ Sizes 20-30", grades X65/X70, both MAOPs.
             for s in sens
         )
         + risk_md(d.get("risk"))
+        + fault_md()
         + """
 
 ## 8. What would change the answer, and what data is needed

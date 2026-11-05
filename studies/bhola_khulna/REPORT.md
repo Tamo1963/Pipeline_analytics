@@ -131,6 +131,18 @@ cheapest in 75% of samples.**
 20,000 Monte Carlo samples. Throughput scenarios: low x0.8 (25%), base x1 (50%), high x1.2 (25%). Rate factors (triangular low-mode-high): line_pipe 0.85-1-1.3, construction 0.85-1-1.4, stations 0.85-1-1.3, other_capex 0.9-1-1.25, energy 0.7-1-1.5, o_and_m 0.9-1-1.2. Groups sampled independently; infeasible samples (e.g. velocity limit exceeded) count as the worst outcome. "-": the percentile falls in samples where that design is infeasible.
 
 
+## 7a. What-if: a fault crossing
+
+No mapped active fault crosses this corridor. A hypothetical strike-slip fault on the
+Barishal - Khulna leg (km 60) was tested with the pipe-soil FE model
+([FAULT_CASE.md](FAULT_CASE.md)):
+* **Strike-slip:** crossing at 60-90° to the strike keeps 24" X65 within the strain limits
+  for up to 2 m of slip. Crossings that compress the pipe fail.
+* **Reverse fault:** a 1 m reverse fault fails every size at a 90° crossing.
+* **Sizing:** the optimum diameter does not change. A fault is a question of crossing
+  design and route.
+
+
 ## 8. What would change the answer, and what data is needed
 
 1. **Throughput.** Larger diameters gain as design flow rises. At 260 MMSCFD the optimum moves

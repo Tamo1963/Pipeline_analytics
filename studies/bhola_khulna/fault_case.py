@@ -51,7 +51,13 @@ def with_fault(al: Alignment, hazard: LegHazard) -> Alignment:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--markdown-only", action="store_true",
+                    help="rewrite FAULT_CASE.md from results/fault_case.json")  # fmt: skip
     args = ap.parse_args()
+    if args.markdown_only:
+        d = json.loads((HERE / "results" / "fault_case.json").read_text())
+        (HERE / "FAULT_CASE.md").write_text(markdown(d))
+        return
     rs = _study()
     case = rs.load_case()
     t0 = time.perf_counter()
@@ -138,21 +144,28 @@ def main() -> None:
     print(json.dumps(out, indent=1, default=str))
 
 
+def _ur(u: float) -> str:
+    return "no convergence" if u == float("inf") else f"{u}"
+
+
 def markdown(d: dict[str, Any]) -> str:
     sw = d["sweeps"]
     head = "| Pipe, slip | Wall mm | " + " | ".join(f"{a}°" for a in ANGLES) + " | Best |"
     sep = "|---" * (len(ANGLES) + 3) + "|"
     lines = [
         f"| {k} | {v['wall_mm']} | "
-        + " | ".join(f"**{u}**" if u > 1 else f"{u}" for u in v["utilisation"].values())
-        + f" | {v['best_angle_deg']}° |"
+        + " | ".join(
+            ("**fails**" if u == float("inf") else f"**{u}**") if u > 1 else f"{u}"
+            for u in v["utilisation"].values()
+        )
+        + f" | {v['best_angle_deg']:g}° |"
         for k, v in sw.items()
     ]
     parts = []
     for dsg in d["designs"]:
         rows = "\n".join(
             f'| {r["nps"]}" {r["grade"]} @ {r["maop_psig"]} psig | {r["wall_mm"]} | '
-            f"{r['strain_utilisation']} | {'pass' if r['passes'] else 'FAIL'} | "
+            f"{_ur(r['strain_utilisation'])} | {'pass' if r['passes'] else 'FAIL'} | "
             f"{r['mitigation'] or '-'} | {r['mitigation_capex_usd_m']} | {r['lcc_usd_m']} | "
             f"{r['lcc_with_mitigation_usd_m']} |"
             for r in dsg["rows"]
@@ -199,17 +212,28 @@ Each size at its best grade and MAOP from the main study.
 {chr(10).join(parts)}
 ## 3. Reading the results
 
-* Crossing angle matters far more than pipe size. Cross so the fault stretches the pipe:
-  for left-lateral slip that means 30-75° to the strike (mirror it for right-lateral
-  slip). Then a 1 m offset passes with the normal wall.
-* Heavier wall over a few hundred metres costs well under 1 % of lifecycle cost. A
-  fault on this route would not change the optimum diameter. It would change the
-  local crossing design: the angle, the heavier wall, and in practice a wide trench
-  with loose, well-graded backfill and no bends near the trace.
-* Before relying on this, a real fault needs the following:
+* **Crossing angle matters far more than pipe size.** For left-lateral slip, crossing at
+  60-90° to the strike keeps the recommended 24" X65 within the strain limits on its
+  normal 6.5 mm wall for up to 2 m of slip; about 75° is best. Flatter crossings (30-45°)
+  over-stretch the pipe at 2 m. Crossings beyond 90° compress it and fail from 0.5-1 m.
+  Mirror the angles for right-lateral slip.
+* **Compression is a buckling problem.** Where the pipe is shortened (strike-slip beyond
+  90°, or a reverse fault), the calculated strains are 5-80 times the limit. The pipe
+  would buckle sideways or upwards under the axial compression. The beam model is
+  outside its range there, so read these as "fails", not as strain values. The
+  heavier-wall results in the 120° case (for example 24.6 mm for 24") show where a
+  thick wall stops the buckling. They are indicative only.
+* **A reverse fault (1 m slip, 45° dip) fails every size and every standard wall** when
+  crossed at 90°. Such a crossing needs realignment and a special design: a wide, loose
+  backfill trench, and in some cases a pipe above ground or in a culvert.
+* **The fault would not change the optimum diameter.** 24" X65 stays the lowest
+  lifecycle-cost design in all three strike-slip cases. Where a heavier wall is enough,
+  it costs at most US$0.07M, under 0.1 % of lifecycle cost. A fault is a question of
+  crossing design and route, not of pipe size.
+* **Before relying on this, a real fault needs the following:**
   * a site-specific fault displacement hazard study (slip, sense, rupture-zone width);
   * soil investigation at the crossing;
-  * a detailed shell model of the crossing.
+  * a shell model of the crossing.
 
 Runtime {d["runtime_s"]} s. Reproduce:
 `uv run python studies/bhola_khulna/fault_case.py --workers 4`.
