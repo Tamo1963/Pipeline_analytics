@@ -152,6 +152,33 @@ class RiskAnalysisInput(_In):
     seed: int = 1
 
 
+class GroundMovementInput(_In):
+    nps: str
+    wall_mm: float = Field(gt=0)
+    grade: str = "X65"
+    design_pressure_barg: float = Field(default=0.0, ge=0)
+    cover_m: float = Field(default=1.2, gt=0, description="cover to the pipe crown")
+    soil: Literal["dense_sand", "loose_sand", "stiff_clay", "soft_clay"] = "dense_sand"
+    unit_weight_kn_m3: float = Field(default=18.0, gt=0)
+    friction_angle_deg: float = Field(default=36.0, ge=0, le=45, description="0 for clay")
+    cohesion_kpa: float = Field(default=0.0, ge=0, description="undrained strength for clay")
+    scenario: Literal["fault", "transverse_pgd", "settlement", "differential_settlement",
+                      "longitudinal_pgd"]  # fmt: skip
+    displacement_m: float = Field(gt=0, description="fault slip or ground displacement")
+    crossing_angle_deg: float = Field(
+        default=90.0, gt=0, lt=180, description="fault: angle between pipe and strike"
+    )
+    dip_deg: float = Field(default=90.0, gt=0, le=90)
+    rake_deg: float = Field(default=0.0, ge=-180, le=180,
+                            description="0 strike-slip, 90 reverse, -90 normal")  # fmt: skip
+    zone_width_m: float = Field(default=50.0, gt=0, description="PGD zone / trough / block")
+    pattern: Literal["cosine", "block"] = "cosine"
+    performance_level: Literal["normal_operability", "pressure_integrity"] = "normal_operability"
+    sweep_crossing_angles: bool = Field(
+        default=False, description="fault only: also find the crossing angle with lowest strain"
+    )
+
+
 class EmptyInput(_In):
     pass
 
@@ -220,6 +247,75 @@ def wall_thickness(study: Study, a: WallThicknessInput) -> dict[str, Any]:
         "d_over_t_at_orderable": round(size.od_mm / orderable, 1),
         "basis": "ASME B31.8 841.1.1" if service is Service.GAS else "ASME B31.4 403.2.1",
     }
+
+
+def ground_movement_check(study: Study, a: GroundMovementInput) -> dict[str, Any]:
+    from pipeline_analytics.mechanical import pipe_from_library
+    from pipeline_analytics.mechanical.pgd import (
+        analyse_pgd,
+        crossing_angle_sweep,
+        fault_movement,
+        longitudinal_pgd,
+        settlement,
+        transverse_pgd,
+    )
+    from pipeline_analytics.mechanical.seismic import PerformanceLevel
+    from pipeline_analytics.mechanical.soil import Coating, Soil, SoilType, soil_springs
+
+    pipe = pipe_from_library(a.nps, a.wall_mm, a.grade)
+    soil = Soil(
+        soil_type=SoilType(a.soil),
+        unit_weight_n_m3=a.unit_weight_kn_m3 * 1e3,
+        friction_angle_deg=a.friction_angle_deg,
+        cohesion_pa=a.cohesion_kpa * 1e3,
+    )
+    springs = soil_springs(pipe.od_m, a.cover_m + pipe.od_m / 2, soil, Coating.POLYETHYLENE)
+    d = a.displacement_m
+    mv = {
+        "fault": lambda: fault_movement(
+            d, a.crossing_angle_deg, dip_deg=a.dip_deg, rake_deg=a.rake_deg
+        ),
+        "transverse_pgd": lambda: transverse_pgd(d, a.zone_width_m, a.pattern),
+        "settlement": lambda: settlement(d, a.zone_width_m),
+        "differential_settlement": lambda: settlement(d, pattern="step"),
+        "longitudinal_pgd": lambda: longitudinal_pgd(d, a.zone_width_m),
+    }[a.scenario]()
+    level = PerformanceLevel(a.performance_level)
+    kw: dict[str, Any] = {"grade": a.grade, "pressure": a.design_pressure_barg * 1e5,
+                          "level": level}  # fmt: skip
+    r = analyse_pgd(pipe, springs, mv, **kw)
+    lim = r.movement_at_limit_m
+    out: dict[str, Any] = {
+        "scenario": mv.label,
+        "result": "PASS" if r.passed else "FAIL",
+        "converged": r.fe.converged,
+        "max_tensile_strain_pct": round(r.fe.max_tensile_strain * 100, 3),
+        "max_compressive_strain_pct": round(r.fe.max_compressive_strain * 100, 3),
+        "tensile_limit_pct": round(r.tensile_limit * 100, 3),
+        "compressive_limit_pct": round(r.compressive_limit * 100, 3),
+        "strain_utilisation": round(r.utilisation, 2),
+        "movement_at_first_strain_limit_m": None if lim is None else round(lim, 2),
+        "soil_springs_kn_per_m": {
+            "axial": round(springs.axial.max_force_n_per_m / 1e3, 1),
+            "lateral": round(springs.lateral.max_force_n_per_m / 1e3, 1),
+            "uplift": round(springs.uplift.max_force_n_per_m / 1e3, 1),
+            "bearing": round(springs.bearing.max_force_n_per_m / 1e3, 1),
+        },
+        "notes": list(r.notes),
+        "method": "Pipe-soil FE (large displacement beam on ALA 2001 springs, Ramberg-Osgood "
+        "steel); strain limits per ALA 2001. Screening: local buckling is judged by the "
+        "strain limit, not modelled.",
+    }
+    if a.scenario == "fault" and a.sweep_crossing_angles:
+        sw = crossing_angle_sweep(pipe, springs, d, (15, 30, 45, 60, 75, 90, 105, 120),
+                                  dip_deg=a.dip_deg, rake_deg=a.rake_deg, **kw)  # fmt: skip
+        out["crossing_angle_sweep"] = [
+            {"crossing_angle_deg": c.crossing_angle_deg,
+             "strain_utilisation": round(c.utilisation, 2) if c.converged else "not converged"}
+            for c in sw.cases
+        ]  # fmt: skip
+        out["best_crossing_angle_deg"] = sw.best_angle_deg
+    return out
 
 
 def reserve_life(study: Study, a: ReserveLifeInput) -> dict[str, Any]:
@@ -577,6 +673,20 @@ TOOLS: tuple[Tool, ...] = (
         ),
         WallThicknessInput,
         wall_thickness,
+    ),
+    Tool(
+        "ground_movement_check",
+        (
+            "Pipe strain from permanent ground movement with a pipe-soil finite-element model "
+            "(ALA 2001 soil springs, large displacement, nonlinear steel): fault crossing "
+            "(slip, crossing angle, dip, rake), transverse PGD (lateral spread / landslide), "
+            "settlement trough, differential settlement, or longitudinal PGD. Returns peak "
+            "tensile and compressive strain against ALA strain limits, the movement at which a "
+            "limit is reached, and optionally the best fault-crossing angle. Takes seconds "
+            "(about a minute with the angle sweep)."
+        ),
+        GroundMovementInput,
+        ground_movement_check,
     ),
     Tool(
         "reserve_life",

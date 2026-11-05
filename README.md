@@ -13,7 +13,7 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 1 | PipeSpec Library (API 5L / ISO 3183, ASME B36.10M, IS 3589): see [`docs/pipespec.md`](docs/pipespec.md) | ✅ MVP done |
 | 2a | Mechanical design per ALA buried-pipe guidelines: see [`docs/mechanical-ala.md`](docs/mechanical-ala.md) | ✅ core checks done |
 | 2b | Class location and liquid/gas hydraulics with station siting: see [`docs/hydraulics-class-location.md`](docs/hydraulics-class-location.md) | ✅ done |
-| 2c | FE model for fault crossings, transverse PGD, settlement | planned |
+| 2c | Pipe–soil FE model: fault crossings, transverse PGD, settlement, crossing-angle sweep; benchmarked against Karamitros et al. (2007): see [`docs/mechanical-fe.md`](docs/mechanical-fe.md) | ✅ done |
 | 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
 | 4 | Route / alignment engine: see [`docs/routing.md`](docs/routing.md) | ✅ done |
 | 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
@@ -50,7 +50,7 @@ src/pipeline_analytics/
   core/         units (pint registry with MMSCMD, MMTPA, kgf/cm², …), jurisdiction & code basis
   pipespec/     pipe specification library + `pipespec` CLI; seed YAML in pipespec/data/
   codes/        location class (B31.8 840.2 / T4S / OISD-226), MAOP along route
-  mechanical/   ALA buried-pipe checks: pressure, soil springs, loads, thermal, buoyancy, seismic
+  mechanical/   ALA buried-pipe checks: pressure, soil springs, loads, thermal, buoyancy, seismic; FE model for faults / PGD
   hydraulics/   liquid & gas pressure profiles, pump/compressor station siting, power
   cost/         unit-rate sets (placeholder India 2026), rate library + `pipeline-rates` CLI, BOQ, CAPEX, OPEX
   economics/    concession cash flows, LCC, tariff, IRR, sensitivity, Monte Carlo risk, economic-diameter curve

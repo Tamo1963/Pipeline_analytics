@@ -12,8 +12,11 @@ Implemented (closed form):
 * **Strain acceptance** for two performance levels (normal operability and
   pressure integrity).
 
-Planned (need a pipe-soil finite-element model built on soil.py springs):
-fault crossings, transverse PGD, landslides at an angle, and settlement.
+Fault crossings, transverse PGD and settlement use the pipe-soil FE model in
+``fe.py`` / ``pgd.py`` (Phase 2c). Note that ``longitudinal_pgd`` below puts the
+whole relative movement on one side of the scarp; where strain is
+displacement-controlled the FE (friction on both sides) gives 1/sqrt(2) of it,
+so this screening value is conservative.
 """
 
 from __future__ import annotations

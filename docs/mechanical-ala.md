@@ -25,9 +25,9 @@ Code: `src/pipeline_analytics/mechanical/`. Every check returns a `CheckResult` 
 | 12 | Seismic wave propagation | Ground strain `V/(α_ε C)`, curvature `A/(α_κ C²)`, soil-friction cap `T_u λ / 4AE` | `seismic.wave_propagation` | ✅ |
 | 13 | PGD, longitudinal | Lateral spread or landslide block parallel to the pipe (elastic screening) | `seismic.longitudinal_pgd` | ✅ screening |
 | 14 | Strain acceptance | Tensile limit; compressive `0.50 t/D' − 0.0025 + 3000(pD/2Et)²` (operability) or `1.76 t/D` (integrity) | `seismic.compressive_strain_limit`, `strain_checks` | ✅ |
-| 15 | PGD, fault crossing | Pipe–soil FE model with the springs above; crossing angle optimisation | — | Planned (Phase 2b) |
-| 16 | PGD, transverse | Lateral spread or landslide perpendicular to the pipe | — | Planned (Phase 2b) |
-| 17 | PGD, settlement / subsidence | Vertical ground movement | — | Planned (Phase 2b) |
+| 15 | PGD, fault crossing | Pipe–soil FE model with the springs above; crossing angle optimisation | `fe.py`, `pgd.py` | ✅ Phase 2c (see `docs/mechanical-fe.md`) |
+| 16 | PGD, transverse | Lateral spread or landslide perpendicular to the pipe | `pgd.py` | ✅ Phase 2c |
+| 17 | PGD, settlement / subsidence | Vertical ground movement | `pgd.py` | ✅ Phase 2c |
 | 18 | Road / rail crossings | API RP 1102 cased/uncased crossing stresses | — | Planned (crossing module) |
 | 19 | Bends and above-ground transitions | Partially restrained thermal growth, bend stresses | — | Planned (Phase 2b) |
 

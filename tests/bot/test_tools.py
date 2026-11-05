@@ -117,6 +117,22 @@ def test_risk_analysis_needs_a_search_and_known_sizes() -> None:
     assert err and "invalid input" in text
 
 
+def test_ground_movement_check() -> None:
+    out = call(Study(), "ground_movement_check", {
+        "nps": "24", "wall_mm": 12.7, "grade": "X65", "design_pressure_barg": 90,
+        "scenario": "fault", "displacement_m": 1.5, "crossing_angle_deg": 60,
+        "sweep_crossing_angles": True,
+    })  # fmt: skip
+    assert out["converged"] and out["result"] in {"PASS", "FAIL"}
+    assert out["max_tensile_strain_pct"] > 0.1
+    assert out["best_crossing_angle_deg"] < 90
+    s = call(Study(), "ground_movement_check", {
+        "nps": "16", "wall_mm": 9.5, "scenario": "settlement", "displacement_m": 0.3,
+        "zone_width_m": 40, "soil": "soft_clay", "friction_angle_deg": 0, "cohesion_kpa": 20,
+    })  # fmt: skip
+    assert s["result"] == "PASS"
+
+
 def test_generate_report_needs_a_search() -> None:
     text, err = run_tool(Study(), "generate_report", {"title": "Test"})
     assert err and "run_design_search" in text

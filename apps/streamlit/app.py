@@ -53,6 +53,13 @@ from pipeline_analytics.mechanical import (
     assess_segment,
     pipe_from_library,
 )
+from pipeline_analytics.mechanical.pgd import (
+    fault_movement,
+    longitudinal_pgd,
+    settlement,
+    transverse_pgd,
+)
+from pipeline_analytics.mechanical.seismic import PerformanceLevel
 from pipeline_analytics.pipespec import WtPolicy, default_library
 from pipeline_analytics.routing import (
     CostSurfaceParams,
@@ -166,7 +173,45 @@ with library_tab:
         except ValueError as e:
             st.error(str(e))
 
+
 # ---------------------------------------------------------------- mechanical
+@st.cache_data(show_spinner="Running the pipe-soil FE model...")
+def _fe_run(pipe_json: str, springs_json: str, mv_json: str, grade: str, p_barg: float,
+            level: str) -> Any:  # fmt: skip
+    from pipeline_analytics.mechanical import PipeSection
+    from pipeline_analytics.mechanical.pgd import GroundMovement, analyse_pgd
+    from pipeline_analytics.mechanical.soil import SoilSprings
+
+    return analyse_pgd(
+        PipeSection.model_validate_json(pipe_json),
+        SoilSprings.model_validate_json(springs_json),
+        GroundMovement.model_validate_json(mv_json),
+        grade=grade,
+        pressure=p_barg * 1e5,
+        level=PerformanceLevel(level),
+    )
+
+
+@st.cache_data(show_spinner="Sweeping crossing angles...")
+def _fe_sweep(pipe_json: str, springs_json: str, slip: float, dip: float, rake: float,
+              grade: str, p_barg: float, level: str) -> Any:  # fmt: skip
+    from pipeline_analytics.mechanical import PipeSection
+    from pipeline_analytics.mechanical.pgd import crossing_angle_sweep
+    from pipeline_analytics.mechanical.soil import SoilSprings
+
+    return crossing_angle_sweep(
+        PipeSection.model_validate_json(pipe_json),
+        SoilSprings.model_validate_json(springs_json),
+        slip,
+        (15, 30, 45, 60, 75, 90, 105, 120),
+        dip_deg=dip,
+        rake_deg=rake,
+        grade=grade,
+        pressure=p_barg * 1e5,
+        level=PerformanceLevel(level),
+    )
+
+
 with mech_tab:
     st.caption(
         "Buried-pipe checks per ALA 2001 Guidelines for the Design of Buried Steel Pipe, "
@@ -293,6 +338,104 @@ with mech_tab:
             ],
             hide_index=True,
         )
+
+        # ---------------------------------------------- FE: faults, PGD, settlement
+        with st.expander("Ground movement: pipe-soil FE model (fault, PGD, settlement)"):
+            st.caption(
+                "Nonlinear beam on the ALA springs above (large displacement, Ramberg-Osgood "
+                "steel), strains checked against ALA limits. Verified against closed forms and "
+                "the Karamitros et al. (2007) fault benchmark: see docs/mechanical-fe.md."
+            )
+            g1, g2, g3 = st.columns(3)
+            kind = g1.selectbox(
+                "Scenario",
+                ["Fault crossing", "Transverse PGD", "Settlement trough",
+                 "Differential settlement", "Longitudinal PGD"],
+                key="f_kind",
+            )  # fmt: skip
+            level = PerformanceLevel(
+                g1.selectbox(
+                    "Performance level", [lv.value for lv in PerformanceLevel], key="f_level"
+                )
+            )
+            if kind == "Fault crossing":
+                f_slip = g2.number_input("Fault slip (m)", value=1.0, min_value=0.01, key="f_slip")
+                f_beta = g2.number_input("Crossing angle to strike (°)", value=60.0,
+                                         min_value=5.0, max_value=175.0, key="f_beta")  # fmt: skip
+                f_dip = g3.number_input("Dip (°)", value=90.0, min_value=10.0, max_value=90.0,
+                                        key="f_dip")  # fmt: skip
+                f_rake = g3.number_input("Rake (°): 0 strike-slip, 90 reverse, -90 normal",
+                                         value=0.0, min_value=-180.0, max_value=180.0,
+                                         key="f_rake")  # fmt: skip
+                movement = fault_movement(f_slip, f_beta, dip_deg=f_dip, rake_deg=f_rake)
+            elif kind == "Transverse PGD":
+                f_d = g2.number_input("Displacement (m)", value=1.0, min_value=0.01, key="f_td")
+                f_w = g2.number_input("Zone width (m)", value=50.0, min_value=2.0, key="f_tw")
+                f_pat = g3.radio("Profile", ["cosine", "block"], key="f_tp")
+                movement = transverse_pgd(f_d, f_w, f_pat)  # type: ignore[arg-type]
+            elif kind == "Settlement trough":
+                f_d = g2.number_input("Settlement (m)", value=0.3, min_value=0.01, key="f_sd")
+                f_w = g2.number_input("Trough width (m)", value=40.0, min_value=2.0, key="f_sw")
+                movement = settlement(f_d, f_w)
+            elif kind == "Differential settlement":
+                f_d = g2.number_input("Step (m)", value=0.2, min_value=0.01, key="f_ds")
+                movement = settlement(f_d, pattern="step")
+            else:
+                f_d = g2.number_input("Displacement (m)", value=0.5, min_value=0.01, key="f_ld")
+                f_w = g2.number_input("Block length (m)", value=100.0, min_value=2.0, key="f_lw")
+                movement = longitudinal_pgd(f_d, f_w)
+            run_fe = st.button("Run FE analysis", key="f_run")
+            fe_key = (m_pipe.model_dump_json(), result.springs.model_dump_json(),
+                      movement.model_dump_json(), m_grade, m_p, level.value)  # fmt: skip
+            if run_fe:
+                st.session_state.f_result = (fe_key, _fe_run(*fe_key))
+            fe_res = st.session_state.get("f_result")
+            if fe_res and fe_res[0] == fe_key:
+                a = fe_res[1]
+                h1, h2, h3, h4 = st.columns(4)
+                h1.metric("Result", "PASS" if a.passed else "FAIL",
+                          f"strain UR {a.utilisation:.2f}",
+                          delta_color="normal" if a.passed else "inverse")  # fmt: skip
+                h2.metric("Max tensile strain", f"{a.fe.max_tensile_strain:.3%}",
+                          f"limit {a.tensile_limit:.2%}", delta_color="off")  # fmt: skip
+                h3.metric("Max compressive strain", f"{a.fe.max_compressive_strain:.3%}",
+                          f"limit {a.compressive_limit:.2%}", delta_color="off")  # fmt: skip
+                lim = a.movement_at_limit_m
+                h4.metric("Movement at first limit", "not reached" if lim is None
+                          else f"{lim:.2f} m")  # fmt: skip
+                for n in a.notes:
+                    st.warning(n)
+                xs = np.array(a.fe.x_elem_m)
+                zoom = np.abs(xs) <= max(60.0, movement.width_m)
+                st.line_chart(pd.DataFrame({
+                    "x (m)": xs[zoom],
+                    "tensile strain %": np.array(a.fe.tensile_strain)[zoom] * 100,
+                    "compressive strain %": np.array(a.fe.compressive_strain)[zoom] * 100,
+                }).set_index("x (m)"))  # fmt: skip
+                xn = np.array(a.fe.x_m)
+                zn = np.abs(xn) <= max(60.0, movement.width_m)
+                comp = 2 if movement.vertical_m and not movement.transverse_m else 1
+                if movement.kind == "block" and movement.axial_m and not movement.transverse_m:
+                    comp = 0
+                pipe_disp = [a.fe.u_m, a.fe.v_m, a.fe.w_m][comp]
+                st.line_chart(pd.DataFrame({
+                    "x (m)": xn[zn],
+                    "pipe (m)": np.array(pipe_disp)[zn],
+                    "ground (m)": np.array(a.fe.ground_m[comp])[zn],
+                }).set_index("x (m)"))  # fmt: skip
+                st.caption(f"{a.fe.elements} elements, {a.fe.steps} load steps; "
+                           f"{a.steel.source or a.steel.model}.")  # fmt: skip
+            if kind == "Fault crossing" and st.button("Find the best crossing angle",
+                                                      key="f_sweep"):  # fmt: skip
+                sw = _fe_sweep(m_pipe.model_dump_json(), result.springs.model_dump_json(),
+                               f_slip, f_dip, f_rake, m_grade, m_p, level.value)  # fmt: skip
+                st.dataframe([{"Crossing angle (°)": c.crossing_angle_deg,
+                               "Tensile %": round(c.max_tensile_strain * 100, 3),
+                               "Compressive %": round(c.max_compressive_strain * 100, 3),
+                               "Strain UR": round(c.utilisation, 2)} for c in sw.cases],
+                             hide_index=True)  # fmt: skip
+                st.success(f"Lowest strain utilisation at {sw.best_angle_deg:g}° to the fault "
+                           "strike (pipe in tension).")  # fmt: skip
 
 # ------------------------------------------------- class location & hydraulics
 with hyd_tab:

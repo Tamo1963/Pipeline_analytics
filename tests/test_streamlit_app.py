@@ -143,3 +143,13 @@ def test_projects_tab_local_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     (p,) = ProjectStore(tmp_path).list_for("asha@example.com")
     assert p.latest_version == 2 and p.owner == "asha@example.com"
+
+
+def test_mechanical_fe_fault_crossing() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=120).run()
+    at.button(key="f_run").click().run()
+    assert not at.exception
+    res = [m for m in at.metric if m.label == "Max tensile strain"]
+    assert res and res[0].value.endswith("%")
+    at.button(key="f_sweep").click().run()
+    assert any("Lowest strain utilisation" in s.value for s in at.success)

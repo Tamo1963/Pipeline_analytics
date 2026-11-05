@@ -12,6 +12,9 @@ Modules:
     thermal         restrained/unrestrained longitudinal & combined stress, anchor length
     buoyancy        negative buoyancy, concrete weight coating thickness
     seismic         wave propagation, longitudinal PGD screening, strain limits
+    fe              pipe-soil finite-element model (large-displacement beam on ALA springs)
+    pgd             fault crossing, transverse PGD, settlement scenarios on the FE model
+    fault_analytical  Karamitros et al. (2007) strike-slip method (screening, benchmark)
     assessment      all checks for one segment, with the governing check
 """
 

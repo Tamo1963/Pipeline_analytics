@@ -321,7 +321,7 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **1. PipeSpec Library MVP** (3–4 wk) | API 5L/ISO 3183 grades, ASME B36.10M/B36.19M dimensions, process & coating catalogue, query API + CLI | ≥ 95% of B36.10M NPS ½–48 sizes loaded; validation tests pass; query examples documented |
 | **2a. Mechanical design (ALA)** ✅ | Pressure design (B31.4/B31.8 + OISD/T4S factors) and ALA buried-pipe checks, `assess_segment()`, Streamlit tab | Every formula matches an independent hand calculation |
 | **2b. Class location & hydraulics** ✅ | Location class (B31.8 840.2 / T4S), MAOP along route, liquid & gas hydraulics, station siting, power and fuel | Gas flow equation matches numerical integration within 0.01%; all formulas hand-checked |
-| **2c. PGD finite-element model** | Fault crossings, transverse PGD, settlement using the ALA soil springs | Agreement with published benchmark cases |
+| **2c. PGD finite-element model** | Fault crossings, transverse PGD, settlement using the ALA soil springs | Agreement with published benchmark cases ✅ (`docs/mechanical-fe.md`, ADR 0010) |
 | **3. Cost & economics** ✅ (placeholder rates) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity, end-to-end option evaluation | BOQ, OPEX, PV, IRR and tariff match hand calculations in tests; economic-diameter curve is U-shaped (interior optimum asserted). An independent spreadsheet reconciliation is still to do once project rates exist |
 | **4. Routing engine** ✅ | Cost surface from AOI layers, least-cost path, distinct alternatives, profile/crossing/class extraction, GeoJSON/KML export | On the synthetic sample AOI: ≥ 3 distinct corridors in ≈ 0.3 s; crossings match a manual count; exclusions respected; every corridor evaluated end to end. Real-data loading (OSM/DEM/WDPA) is still to do |
 | **5. Optimiser** ✅ | Design search (diameter × grade × MAOP), route iteration loop with convergence, scenario tree, fixed-alignment studies, offtakes, declining supply pressure | Converges on the synthetic AOI; Bhola–Khulna test case run with sensitivities (`studies/bhola_khulna/REPORT.md`) |
@@ -393,4 +393,14 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
   Sustaining station CAPEX now carries the same indirects as initial CAPEX, so the Bhola figures were re-run.
 
-**Next steps:** run the bot benchmark with credentials; load project rates (`pipeline-rates new`) in place of the placeholder set; Phase 2c (FE model for fault crossings and PGD).
+* Phase 2c complete (`docs/mechanical-fe.md`, ADR 0010):
+  * a pipe–soil FE model (large-displacement beam, fiber sections and ALA springs) covering fault crossings, transverse PGD, settlement and longitudinal PGD;
+  * a crossing-angle sweep;
+  * the model appears in the Mechanical tab and as the bot tool `ground_movement_check`.
+
+  Verification: it matches the closed forms, and against the Karamitros et al. (2007) strike-slip benchmark the axial force agrees within 2.5 % and peak strain within 10 % in 9 of 12 cases. It is conservative by up to 28 % at intermediate offsets.
+
+**Next steps:**
+* run the bot benchmark with credentials;
+* load project rates (`pipeline-rates new`) in place of the placeholder set;
+* link mapped faults and landslide zones from the GIS layers to `ground_movement_check` during routing.
