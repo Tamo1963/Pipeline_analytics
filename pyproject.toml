@@ -19,10 +19,14 @@ dependencies = [
 
 [project.scripts]
 pipespec = "pipeline_analytics.pipespec.cli:main"
+pipeline-bot = "pipeline_analytics.bot.cli:main"
 
 [project.optional-dependencies]
 ui = ["streamlit>=1.38", "pandas>=2.2"]
 gis = ["pyproj>=3.6"]
+bot = [
+    "anthropic>=2.5.0",
+]
 
 [dependency-groups]
 dev = [
@@ -49,6 +53,8 @@ select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
 [tool.ruff.lint.per-file-ignores]
 # Markdown report templates: table rows cannot be wrapped
 "studies/**/make_report.py" = ["E501"]
+# HTML page template: long markup lines and typographic dashes are intended
+"studies/**/make_html.py" = ["E501", "RUF001"]
 
 [tool.mypy]
 python_version = "3.11"

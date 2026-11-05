@@ -67,8 +67,9 @@ st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
-basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab = st.tabs(
+bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab = st.tabs(
     [
+        "Feasibility bot",
         "Study basis",
         "Pipe library",
         "Mechanical (ALA)",
@@ -698,3 +699,52 @@ with route_tab:
             d2.download_button("Download KML", to_kml(items, crs), "corridors.kml")
         except ImportError:
             d2.info("Install the 'gis' extra for KML export")
+
+# ------------------------------------------------------------ feasibility bot
+with bot_tab:
+    st.caption(
+        "Describe your project in plain language: fluid, flow, route legs, pressures, concession. "
+        "The bot runs the engine's tools and answers only with figures they return; each answer "
+        "is checked for numbers that no tool produced."
+    )
+    if "bot" not in st.session_state:
+        try:
+            from pipeline_analytics.bot import FeasibilityBot
+
+            st.session_state.bot = FeasibilityBot()
+            st.session_state.chat = []
+        except Exception as e:  # missing extra or credentials
+            st.session_state.bot = None
+            st.session_state.bot_error = str(e)
+    bot = st.session_state.bot
+    if bot is None:
+        st.info(
+            "The bot needs the 'bot' extra and Claude API credentials: set ANTHROPIC_API_KEY "
+            "(or sign in with `ant auth login`) and restart the app. "
+            f"Details: {st.session_state.get('bot_error', '')}"
+        )
+    else:
+        for role, msg in st.session_state.chat:
+            st.chat_message(role).markdown(msg)
+        prompt = st.chat_input("Ask about your pipeline project", key="bot_input")
+        if prompt:
+            st.chat_message("user").markdown(prompt)
+            st.session_state.chat.append(("user", prompt))
+            try:
+                with st.spinner("Working: running the engine..."):
+                    reply = bot.ask(prompt)
+            except Exception as e:  # credentials, network, rate limits
+                st.error(
+                    "The Claude API call failed. If no credentials are set, set "
+                    f"ANTHROPIC_API_KEY or sign in with `ant auth login`, then restart. ({e})"
+                )
+                st.session_state.pop("bot")
+            else:
+                answer = reply.text
+                if reply.unsupported:
+                    answer += (
+                        "\n\n> Check: these figures were not found in any tool result: "
+                        + ", ".join(reply.unsupported)
+                    )
+                st.chat_message("assistant").markdown(answer)
+                st.session_state.chat.append(("assistant", answer))

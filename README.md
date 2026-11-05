@@ -17,7 +17,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
 | 4 | Route / alignment engine: see [`docs/routing.md`](docs/routing.md) | ✅ done |
 | 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
-| 6 | Feasibility bot | next |
+| 6 | Feasibility bot (Claude agent over the engine tools, number guardrail): see [`docs/bot.md`](docs/bot.md) | ✅ built; live benchmark pending credentials |
+| 7 | Reports & UI | next |
 
 ## Development
 
@@ -54,7 +55,7 @@ src/pipeline_analytics/
   economics/    concession cash flows, LCC, tariff, IRR, sensitivity, economic-diameter curve
   routing/      AOI layers, cost surface, least-cost path, alternatives, extraction, GeoJSON/KML
   optimiser/    design search, route iteration, scenario tree, fixed-alignment studies
-  bot/          feasibility specialist bot           (Phase 6)
+  bot/          feasibility bot: Claude agent, tools, guardrail, benchmark (`pipeline-bot`)
   reports/ api/                                      (Phase 7)
 apps/streamlit/ UI
 studies/       worked studies (Bhola - Khulna test case)

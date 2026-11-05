@@ -325,7 +325,7 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **3. Cost & economics** ✅ (placeholder rates) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity, end-to-end option evaluation | BOQ, OPEX, PV, IRR and tariff match hand calculations in tests; economic-diameter curve is U-shaped (interior optimum asserted). An independent spreadsheet reconciliation is still to do once project rates exist |
 | **4. Routing engine** ✅ | Cost surface from AOI layers, least-cost path, distinct alternatives, profile/crossing/class extraction, GeoJSON/KML export | On the synthetic sample AOI: ≥ 3 distinct corridors in ≈ 0.3 s; crossings match a manual count; exclusions respected; every corridor evaluated end to end. Real-data loading (OSM/DEM/WDPA) is still to do |
 | **5. Optimiser** ✅ | Design search (diameter × grade × MAOP), route iteration loop with convergence, scenario tree, fixed-alignment studies, offtakes, declining supply pressure | Converges on the synthetic AOI; Bhola–Khulna test case run with sensitivities (`studies/bhola_khulna/REPORT.md`) |
-| **6. Feasibility Bot** (4 wk) | Agent, tool layer, prompts, study memory, guardrails, eval set of 30 benchmark queries | ≥ 90% of eval queries answered with tool-backed numbers and no fabricated values |
+| **6. Feasibility Bot** ✅ (live benchmark pending) | Agent, 9 tools over the engine, prompts, study memory, number guardrail, 30-case benchmark, CLI and Streamlit chat | Offline tests pass (scripted client); live benchmark ≥ 90 % to be run with Claude API credentials |
 | **7. Reports & UI** (3–4 wk) | Streamlit app (chat + map + scenario comparison), DOCX/XLSX report generator | End-to-end study from chat to report in one session |
 | **8. Hardening** | Monte Carlo, user cost-database management, auth, multi-user projects | — |
 
@@ -381,4 +381,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 5 complete (`docs/optimiser.md`). Test case: Bhola → Barishal → Khulna gas evacuation (`studies/bhola_khulna/`).
 
-**Next step:** Phase 6, the feasibility bot: a conversational front end that collects the brief, runs these tools, and explains each iteration. Replace the placeholder rates as soon as project rates are available.
+* Phase 6 built (`docs/bot.md`, ADR 0008). The live 30-case benchmark needs Claude API credentials.
+
+**Next step:** run the bot benchmark with credentials; then Phase 7 (reports and UI: DOCX/XLSX study report generator, map views). Replace the placeholder rates as soon as project rates are available.

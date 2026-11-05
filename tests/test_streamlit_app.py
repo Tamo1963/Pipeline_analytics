@@ -87,3 +87,13 @@ def test_route_tab_finds_corridors() -> None:
     assert not at.exception
     assert not [e.value for e in at.error]
     assert len(at.dataframe) >= 1
+
+
+def test_bot_tab_explains_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):
+        monkeypatch.delenv(var, raising=False)
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    assert not at.exception
+    at.chat_input(key="bot_input").set_value("Wall for 24 inch X70 at 92 barg?").run()
+    assert not at.exception
+    assert any("Claude API call failed" in e.value for e in at.error)
