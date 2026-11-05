@@ -1,0 +1,561 @@
+{
+ "reserves": {
+  "remaining_recoverable_tcf": 1.256,
+  "years_at_pipeline_rate_only": 19.1,
+  "years_if_local_use_continues": 13.2,
+  "upside_years_at_pipeline_rate": 78.5
+ },
+ "alignments": {
+  "A_note": {
+   "description": "NOTE route: Bhola junction - Laharhat - Barishal (63 km), then Jhalokathi - Pirojpur - Bagerhat - Khulna (110 km)",
+   "length_km": 173.0,
+   "hdd_m": 9000.0,
+   "wet_length_km": 54.9,
+   "best": {
+    "nps": "24",
+    "grade": "X65",
+    "maop_psig": 1000,
+    "walls_mm": {
+     "1-2": 6.5,
+     "2": 7.8,
+     "3": 9.4
+    },
+    "wall_governed_by": [
+     "hoop stress"
+    ],
+    "pipe_tonnes": 17356,
+    "concrete_m3": 9530,
+    "capex_usd_m": 73.6,
+    "pv_capex_usd_m": 68.8,
+    "pv_opex_usd_m": 14.5,
+    "lcc_usd_m": 83.3,
+    "lcc_inr_cr": 733.2,
+    "max_stations": 1,
+    "first_compression_year": 10,
+    "peak_compression_mw": 2.83,
+    "levelised_usd_per_mmbtu": 0.172,
+    "tariff_12pct_usd_per_mmbtu": 0.224
+   },
+   "by_size": {
+    "16": {
+     "infeasible": [
+      "hydraulics at 5.66336: fails gas velocity"
+     ]
+    },
+    "18": {
+     "nps": "18",
+     "grade": "X70",
+     "maop_psig": 1440,
+     "walls_mm": {
+      "1-2": 6.5,
+      "2": 7.8,
+      "3": 9.4
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 12954,
+     "concrete_m3": 4599,
+     "capex_usd_m": 74.4,
+     "pv_capex_usd_m": 79.6,
+     "pv_opex_usd_m": 31.7,
+     "lcc_usd_m": 111.3,
+     "lcc_inr_cr": 979.4,
+     "max_stations": 4,
+     "first_compression_year": 1,
+     "peak_compression_mw": 10.59,
+     "levelised_usd_per_mmbtu": 0.23,
+     "tariff_12pct_usd_per_mmbtu": 0.284
+    },
+    "20": {
+     "nps": "20",
+     "grade": "X70",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 5.3,
+      "2": 6.1,
+      "3": 7.3
+     },
+     "wall_governed_by": [
+      "D/t <= 96",
+      "hoop stress"
+     ],
+     "pipe_tonnes": 11709,
+     "concrete_m3": 6673,
+     "capex_usd_m": 62.1,
+     "pv_capex_usd_m": 67.7,
+     "pv_opex_usd_m": 20.7,
+     "lcc_usd_m": 88.4,
+     "lcc_inr_cr": 778.1,
+     "max_stations": 2,
+     "first_compression_year": 2,
+     "peak_compression_mw": 6.02,
+     "levelised_usd_per_mmbtu": 0.182,
+     "tariff_12pct_usd_per_mmbtu": 0.231
+    },
+    "24": {
+     "nps": "24",
+     "grade": "X65",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 6.5,
+      "2": 7.8,
+      "3": 9.4
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 17356,
+     "concrete_m3": 9530,
+     "capex_usd_m": 73.6,
+     "pv_capex_usd_m": 68.8,
+     "pv_opex_usd_m": 14.5,
+     "lcc_usd_m": 83.3,
+     "lcc_inr_cr": 733.2,
+     "max_stations": 1,
+     "first_compression_year": 10,
+     "peak_compression_mw": 2.83,
+     "levelised_usd_per_mmbtu": 0.172,
+     "tariff_12pct_usd_per_mmbtu": 0.224
+    },
+    "26": {
+     "nps": "26",
+     "grade": "X70",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 6.9,
+      "2": 7.9,
+      "3": 9.4
+     },
+     "wall_governed_by": [
+      "D/t <= 96",
+      "hoop stress"
+     ],
+     "pipe_tonnes": 19782,
+     "concrete_m3": 11242,
+     "capex_usd_m": 79.9,
+     "pv_capex_usd_m": 73.1,
+     "pv_opex_usd_m": 13.7,
+     "lcc_usd_m": 86.8,
+     "lcc_inr_cr": 764.0,
+     "max_stations": 1,
+     "first_compression_year": 12,
+     "peak_compression_mw": 2.3,
+     "levelised_usd_per_mmbtu": 0.179,
+     "tariff_12pct_usd_per_mmbtu": 0.235
+    },
+    "28": {
+     "nps": "28",
+     "grade": "X65",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 7.6,
+      "2": 9.1,
+      "3": 10.9
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 23634,
+     "concrete_m3": 12922,
+     "capex_usd_m": 86.5,
+     "pv_capex_usd_m": 78.2,
+     "pv_opex_usd_m": 13.4,
+     "lcc_usd_m": 91.7,
+     "lcc_inr_cr": 806.5,
+     "max_stations": 1,
+     "first_compression_year": 13,
+     "peak_compression_mw": 1.95,
+     "levelised_usd_per_mmbtu": 0.189,
+     "tariff_12pct_usd_per_mmbtu": 0.249
+    },
+    "30": {
+     "nps": "30",
+     "grade": "X70",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 8.0,
+      "2": 9.1,
+      "3": 10.9
+     },
+     "wall_governed_by": [
+      "D/t <= 96",
+      "hoop stress"
+     ],
+     "pipe_tonnes": 26467,
+     "concrete_m3": 14951,
+     "capex_usd_m": 93.7,
+     "pv_capex_usd_m": 84.0,
+     "pv_opex_usd_m": 13.2,
+     "lcc_usd_m": 97.3,
+     "lcc_inr_cr": 855.9,
+     "max_stations": 1,
+     "first_compression_year": 14,
+     "peak_compression_mw": 1.7,
+     "levelised_usd_per_mmbtu": 0.201,
+     "tariff_12pct_usd_per_mmbtu": 0.266
+    },
+    "36": {
+     "nps": "36",
+     "grade": "X65",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 9.8,
+      "2": 11.7,
+      "3": 14.1
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 39176,
+     "concrete_m3": 21309,
+     "capex_usd_m": 116.6,
+     "pv_capex_usd_m": 103.3,
+     "pv_opex_usd_m": 13.4,
+     "lcc_usd_m": 116.7,
+     "lcc_inr_cr": 1027.0,
+     "max_stations": 1,
+     "first_compression_year": 15,
+     "peak_compression_mw": 1.33,
+     "levelised_usd_per_mmbtu": 0.241,
+     "tariff_12pct_usd_per_mmbtu": 0.322
+    }
+   }
+  },
+  "B_gtcl": {
+   "description": "TBS / GTCL-CEGIS route: Shahbazpur - Bhola North - Ilisha - Mehendiganj - Hizla - Barishal (96 km), then Barishal - Khulna (109 km)",
+   "length_km": 205.0,
+   "hdd_m": 12000.0,
+   "wet_length_km": 71.0,
+   "best": {
+    "nps": "24",
+    "grade": "X65",
+    "maop_psig": 1000,
+    "walls_mm": {
+     "1-2": 6.5,
+     "2": 7.8,
+     "3": 9.4
+    },
+    "wall_governed_by": [
+     "hoop stress"
+    ],
+    "pipe_tonnes": 20533,
+    "concrete_m3": 12316,
+    "capex_usd_m": 85.0,
+    "pv_capex_usd_m": 79.8,
+    "pv_opex_usd_m": 16.1,
+    "lcc_usd_m": 95.9,
+    "lcc_inr_cr": 843.9,
+    "max_stations": 1,
+    "first_compression_year": 8,
+    "peak_compression_mw": 3.24,
+    "levelised_usd_per_mmbtu": 0.198,
+    "tariff_12pct_usd_per_mmbtu": 0.258
+   },
+   "by_size": {
+    "16": {
+     "infeasible": [
+      "hydraulics at 5.66336: fails gas velocity"
+     ]
+    },
+    "18": {
+     "nps": "18",
+     "grade": "X70",
+     "maop_psig": 1440,
+     "walls_mm": {
+      "1-2": 6.5,
+      "2": 7.8,
+      "3": 9.4
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 15325,
+     "concrete_m3": 5944,
+     "capex_usd_m": 85.6,
+     "pv_capex_usd_m": 96.4,
+     "pv_opex_usd_m": 39.9,
+     "lcc_usd_m": 136.4,
+     "lcc_inr_cr": 1200.0,
+     "max_stations": 5,
+     "first_compression_year": 1,
+     "peak_compression_mw": 14.97,
+     "levelised_usd_per_mmbtu": 0.281,
+     "tariff_12pct_usd_per_mmbtu": 0.345
+    },
+    "20": {
+     "nps": "20",
+     "grade": "X70",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 5.3,
+      "2": 6.1,
+      "3": 7.3
+     },
+     "wall_governed_by": [
+      "D/t <= 96",
+      "hoop stress"
+     ],
+     "pipe_tonnes": 13854,
+     "concrete_m3": 8624,
+     "capex_usd_m": 80.8,
+     "pv_capex_usd_m": 80.1,
+     "pv_opex_usd_m": 24.9,
+     "lcc_usd_m": 105.1,
+     "lcc_inr_cr": 924.6,
+     "max_stations": 3,
+     "first_compression_year": 1,
+     "peak_compression_mw": 7.38,
+     "levelised_usd_per_mmbtu": 0.217,
+     "tariff_12pct_usd_per_mmbtu": 0.275
+    },
+    "24": {
+     "nps": "24",
+     "grade": "X65",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 6.5,
+      "2": 7.8,
+      "3": 9.4
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 20533,
+     "concrete_m3": 12316,
+     "capex_usd_m": 85.0,
+     "pv_capex_usd_m": 79.8,
+     "pv_opex_usd_m": 16.1,
+     "lcc_usd_m": 95.9,
+     "lcc_inr_cr": 843.9,
+     "max_stations": 1,
+     "first_compression_year": 8,
+     "peak_compression_mw": 3.24,
+     "levelised_usd_per_mmbtu": 0.198,
+     "tariff_12pct_usd_per_mmbtu": 0.258
+    },
+    "26": {
+     "nps": "26",
+     "grade": "X70",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 6.9,
+      "2": 7.9,
+      "3": 9.4
+     },
+     "wall_governed_by": [
+      "D/t <= 96",
+      "hoop stress"
+     ],
+     "pipe_tonnes": 23406,
+     "concrete_m3": 14528,
+     "capex_usd_m": 92.5,
+     "pv_capex_usd_m": 84.6,
+     "pv_opex_usd_m": 14.9,
+     "lcc_usd_m": 99.5,
+     "lcc_inr_cr": 875.2,
+     "max_stations": 1,
+     "first_compression_year": 11,
+     "peak_compression_mw": 2.6,
+     "levelised_usd_per_mmbtu": 0.205,
+     "tariff_12pct_usd_per_mmbtu": 0.27
+    },
+    "28": {
+     "nps": "28",
+     "grade": "X65",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 7.6,
+      "2": 9.1,
+      "3": 10.9
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 27962,
+     "concrete_m3": 16699,
+     "capex_usd_m": 100.5,
+     "pv_capex_usd_m": 90.8,
+     "pv_opex_usd_m": 14.5,
+     "lcc_usd_m": 105.2,
+     "lcc_inr_cr": 925.8,
+     "max_stations": 1,
+     "first_compression_year": 12,
+     "peak_compression_mw": 2.18,
+     "levelised_usd_per_mmbtu": 0.217,
+     "tariff_12pct_usd_per_mmbtu": 0.287
+    },
+    "30": {
+     "nps": "30",
+     "grade": "X70",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 8.0,
+      "2": 9.1,
+      "3": 10.9
+     },
+     "wall_governed_by": [
+      "D/t <= 96",
+      "hoop stress"
+     ],
+     "pipe_tonnes": 31313,
+     "concrete_m3": 19322,
+     "capex_usd_m": 109.1,
+     "pv_capex_usd_m": 97.7,
+     "pv_opex_usd_m": 14.2,
+     "lcc_usd_m": 111.9,
+     "lcc_inr_cr": 985.0,
+     "max_stations": 1,
+     "first_compression_year": 13,
+     "peak_compression_mw": 1.87,
+     "levelised_usd_per_mmbtu": 0.231,
+     "tariff_12pct_usd_per_mmbtu": 0.307
+    },
+    "36": {
+     "nps": "36",
+     "grade": "X65",
+     "maop_psig": 1000,
+     "walls_mm": {
+      "1-2": 9.8,
+      "2": 11.7,
+      "3": 14.1
+     },
+     "wall_governed_by": [
+      "hoop stress"
+     ],
+     "pipe_tonnes": 46345,
+     "concrete_m3": 27539,
+     "capex_usd_m": 136.7,
+     "pv_capex_usd_m": 120.7,
+     "pv_opex_usd_m": 14.3,
+     "lcc_usd_m": 135.0,
+     "lcc_inr_cr": 1188.0,
+     "max_stations": 1,
+     "first_compression_year": 15,
+     "peak_compression_mw": 1.4,
+     "levelised_usd_per_mmbtu": 0.278,
+     "tariff_12pct_usd_per_mmbtu": 0.373
+    }
+   }
+  }
+ },
+ "sensitivity": [
+  {
+   "case": "Base (19 yr, 180 mmscfd)",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 83.3,
+   "lcc_30in_usd_m": 97.3,
+   "30in_premium_pct": 16.7,
+   "best_tariff_usd_per_mmbtu": 0.224
+  },
+  {
+   "case": "Island local use continues: 13 yr",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 84.0,
+   "lcc_30in_usd_m": 97.2,
+   "30in_premium_pct": 15.8,
+   "best_tariff_usd_per_mmbtu": 0.255
+  },
+  {
+   "case": "Upside reserves: 25 yr",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 82.4,
+   "lcc_30in_usd_m": 97.0,
+   "30in_premium_pct": 17.8,
+   "best_tariff_usd_per_mmbtu": 0.21
+  },
+  {
+   "case": "Throughput 260 mmscfd",
+   "best_nps": "26",
+   "best_grade": "X70",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 93.7,
+   "lcc_30in_usd_m": 100.2,
+   "30in_premium_pct": 6.9,
+   "best_tariff_usd_per_mmbtu": 0.173
+  },
+  {
+   "case": "Discount rate 12 %",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 78.0,
+   "lcc_30in_usd_m": 92.1,
+   "30in_premium_pct": 18.1,
+   "best_tariff_usd_per_mmbtu": 0.224
+  },
+  {
+   "case": "Supply holds at 62 barg",
+   "best_nps": "20",
+   "best_grade": "X70",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 65.1,
+   "lcc_30in_usd_m": 93.0,
+   "30in_premium_pct": 42.8,
+   "best_tariff_usd_per_mmbtu": 0.177
+  },
+  {
+   "case": "Supply falls to 25 barg",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 92.2,
+   "lcc_30in_usd_m": 103.9,
+   "30in_premium_pct": 12.7,
+   "best_tariff_usd_per_mmbtu": 0.243
+  },
+  {
+   "case": "River HDD x2",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 88.7,
+   "lcc_30in_usd_m": 103.9,
+   "30in_premium_pct": 17.2,
+   "best_tariff_usd_per_mmbtu": 0.239
+  },
+  {
+   "case": "No Barishal offtake",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 82.9,
+   "lcc_30in_usd_m": 93.9,
+   "30in_premium_pct": 13.2,
+   "best_tariff_usd_per_mmbtu": 0.221
+  },
+  {
+   "case": "HDD unit cost x5",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 107.6,
+   "lcc_30in_usd_m": 127.6,
+   "30in_premium_pct": 18.6,
+   "best_tariff_usd_per_mmbtu": 0.293
+  },
+  {
+   "case": "Capital rates x3.8 (calibrated to GTCL budget)",
+   "best_nps": "24",
+   "best_grade": "X65",
+   "best_maop_psig": 1000,
+   "best_lcc_usd_m": 280.1,
+   "lcc_30in_usd_m": 336.2,
+   "30in_premium_pct": 20.1,
+   "best_tariff_usd_per_mmbtu": 0.776
+  }
+ ],
+ "calibration": {
+  "gtcl_budget_usd_m": 368.9,
+  "model_gtcl_design_usd_m": 97.8,
+  "capital_rate_factor": 3.77
+ },
+ "runtime_s": 255.4,
+ "evaluations": 316
+}

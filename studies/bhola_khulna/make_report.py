@@ -63,8 +63,8 @@ def main() -> None:
   {best_a["maop_psig"]} psig** (LCC US$ {best_a["lcc_usd_m"]}M PV). 30" costs
   **{prem:.0f} % more** over the life of the project (US$ {a30.get("lcc_usd_m", "-")}M).
 * The finding is robust: across {len(sens)} sensitivity cases the optimum is
-  {" or ".join(chr(34).join([w, ""]) for w in wins)}. 30" only comes close if throughput rises
-  to 260 MMSCFD (see section 6). A larger pipe is justified only by flow beyond 180 MMSCFD, e.g.
+  {" or ".join(w + chr(34) for w in wins)}, never 30". The gap to 30" narrows most when
+  throughput rises to 260 MMSCFD (see section 6). A larger pipe is justified only by flow beyond 180 MMSCFD, e.g.
   national-grid transit or proven upside reserves.
 * **Compression:** with field pressure falling from 62 to 35 barg, the optimum needs compression
   from year {_fmt(best_a["first_compression_year"])} (peak {best_a["peak_compression_mw"]} MW).
@@ -140,8 +140,9 @@ Sizes 20-30", grades X65/X70, both MAOPs.
 
 ## 7. What would change the answer, and what data is needed
 
-1. **Throughput.** If the line must carry more than ~250 MMSCFD (national-grid transit, LNG
-   back-feed, proven upside reserves), larger diameters become competitive. Confirm the design
+1. **Throughput.** Larger diameters gain as design flow rises. At 260 MMSCFD the optimum moves
+   up one size and the gap to 30" narrows (section 6). A 30" line pays off only for flows well
+   above that (national-grid transit, LNG back-feed, proven upside reserves). Confirm the design
    flow and its duration with Petrobangla / GTCL.
 2. **Field pressure forecast.** This drives when compression is needed and the optimum size.
    Obtain the BAPEX well deliverability and pressure decline forecast.
