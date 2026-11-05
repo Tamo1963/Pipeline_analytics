@@ -61,6 +61,12 @@ def _study() -> Any:
 
 
 def main() -> None:
+    import sys
+
+    if "--markdown-only" in sys.argv:
+        d = json.loads((HERE / "results" / "liquefaction_case.json").read_text())
+        (HERE / "LIQUEFACTION_CASE.md").write_text(markdown(d))
+        return
     t0 = time.perf_counter()
     rs = _study()
     case = rs.load_case()
@@ -214,10 +220,16 @@ For comparison, the base lifecycle cost of 24" X65 is US$ {d["base_lcc_usd_m"]}M
   not give. At 30 km a 5 m bank spreads about 2 m and the movement reaches about 500 m
   inland; at 100 km the spread is much smaller. A site-specific seismic hazard study
   (deaggregation by magnitude and distance) is therefore the first data need.
-* **The remedy is HDD length, not pipe size.** Surfacing the HDDs some tens of metres
-  back from the bank toes keeps the pipe within the strain limits. That costs well under
-  1 % of lifecycle cost. The thicker-walled 30" needs less setback, but that does not
-  outweigh its higher lifecycle cost.
+* **Bank height sets how far the spread reaches, not the movement at the toe.** Near the
+  face the regression's W term is capped at the edge of its data (20 %), so the toe
+  value is the same for 3, 5 and 8 m banks. Taller banks spread further inland and drag
+  more pipe. The required HDD setback for 24" X65 therefore grows from 0 (3 m bank) to
+  50 m (5 m) and 300 m (8 m) at the 30 km scenario. No setback is needed at 60 km or
+  beyond.
+* **The remedy is HDD length, not pipe size.** In the worst case tested (8 m banks, 30 km)
+  the longer HDDs add about US$ 1.8M (about 2 % of lifecycle cost). 24" X65 plus that
+  extension is still well below 30" X70. The 30" (8 mm wall) needs no setback, but costs
+  US$ 14M more over its life.
 * **Flotation.** An empty pipe in liquefied soil needs far more ballast than in water.
   Where open-cut trench crosses liquefiable flood plain, use set-on weights or screw
   anchors, or keep the pipe below the liquefiable layer, rather than the concrete

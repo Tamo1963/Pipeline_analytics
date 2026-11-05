@@ -36,6 +36,27 @@ def size_table(by_size: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def liquefaction_md() -> str:
+    if not (HERE / "results" / "liquefaction_case.json").exists():
+        return ""
+    return """
+
+## 7b. What-if: liquefaction and lateral spreading at river banks
+
+No borehole data, so this uses a generic young deltaic bank profile and BNBC 2020 Zone 1
+shaking (assumed). See [LIQUEFACTION_CASE.md](LIQUEFACTION_CASE.md).
+* **Liquefaction:** the loose sands liquefy at the code level (LPI about 10).
+* **Lateral spread:** about 2.3 m at the bank toe if the source is 30 km away, small
+  beyond 60 km.
+* **HDD setback:** the remedy is to surface the HDDs back from the bank toes. 24" X65
+  needs 0-300 m (bank 3-8 m), adding at most about US$ 1.8M. The optimum size does not
+  change.
+* **Flotation:** an empty pipe would float in liquefied flood plain. Use anchors or
+  set-on weights, not the concrete coating sized for water.
+* **Data needed:** site borehole (SPT/CPT) data and a site-specific seismic hazard study.
+"""
+
+
 def fault_md() -> str:
     """Short what-if section if fault_case.py has been run."""
     f = HERE / "results" / "fault_case.json"
@@ -203,6 +224,7 @@ Sizes 20-30", grades X65/X70, both MAOPs.
         )
         + risk_md(d.get("risk"))
         + fault_md()
+        + liquefaction_md()
         + """
 
 ## 8. What would change the answer, and what data is needed
