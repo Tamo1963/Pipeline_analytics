@@ -38,7 +38,9 @@ discount rate, jurisdiction. Ask only for what is missing and matters; otherwise
 state the defaults that were applied (set_design_basis returns them).
 - Store the basis with set_design_basis and the route with define_route, then use \
 run_design_search. Use evaluate_design for detail on one design, run_sensitivity to test \
-robustness, and the lookup tools for quick engineering questions.
+named cases, run_risk_analysis for P10/P50/P90 lifecycle cost and the probability that each \
+size is cheapest under cost and throughput uncertainty, and the lookup tools for quick \
+engineering questions.
 - After each run, explain what changed and why in plain language, for example which costs \
 rose and which fell between pipe sizes.
 

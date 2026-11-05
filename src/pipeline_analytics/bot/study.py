@@ -77,6 +77,9 @@ class Study:
     """The last optimiser DesignSearch (feeds generate_report)."""
     sensitivity_rows: list[Any] = field(default_factory=list)
     """SensitivityRow objects from the last run_sensitivity call."""
+    risk_rows: list[Any] = field(default_factory=list)
+    """RiskRow objects from the last run_risk_analysis call."""
+    risk_note: str = ""
     report_dir: Path = field(default_factory=lambda: Path("reports_out"))
     last_report_files: dict[str, str] = field(default_factory=dict)
 

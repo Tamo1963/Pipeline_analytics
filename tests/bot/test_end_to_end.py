@@ -51,6 +51,7 @@ def test_chat_to_report(tmp_path: Path) -> None:
         resp("tool_use", tool("t4", "run_sensitivity", {
             "cases": [{"name": "Longer concession", "operating_years": 18}],
             "sizes": ["20", "24"], "compare_nps": "24"})),
+        resp("tool_use", tool("t4b", "run_risk_analysis", {"samples": 2000})),
         resp("tool_use", tool("t5", "generate_report", {"title": "Demo Line Screening",
                                                          "compare_nps": "24"})),
         resp("end_turn", text("placeholder, replaced from the tool output")),
@@ -61,7 +62,7 @@ def test_chat_to_report(tmp_path: Path) -> None:
 
     names = [n for n, _, _ in reply.tool_calls]
     assert names == ["set_design_basis", "define_route", "run_design_search", "run_sensitivity",
-                     "generate_report"]  # fmt: skip
+                     "run_risk_analysis", "generate_report"]  # fmt: skip
     assert not any(err for _, _, err in reply.tool_calls)
     assert reply.unsupported == []  # every figure in the answer came from a tool
 
@@ -73,6 +74,8 @@ def test_chat_to_report(tmp_path: Path) -> None:
     best = bot.study.last_search.best
     doc_text = "\n".join(p.text for p in Document(str(docx_path)).paragraphs)
     assert f'{best.nps}" {best.grade}' in doc_text
+    assert any(p.startswith("7  Risk (Monte Carlo)") for p in doc_text.splitlines())
+    assert "Risk" in load_workbook(xlsx_path).sheetnames
     assert "Longer concession" in "\n".join(
         c.text for t in Document(str(docx_path)).tables for r in t.rows for c in r.cells
     )

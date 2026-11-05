@@ -187,6 +187,32 @@ def per_size(search: Any) -> dict[str, tuple[OptionInput, OptionResult]]:
     return out
 
 
+def risk_on(search: Any, case: dict[str, Any], workers: int) -> dict[str, Any]:
+    """Monte Carlo on the best design of each feasible size (default ranges)."""
+    from pipeline_analytics.economics.risk import RiskInputs, monte_carlo
+    from pipeline_analytics.reports.model import risk_note_for
+
+    chosen = [(i, r) for i, r in per_size(search).values() if r.feasible]
+    chosen.sort(key=lambda ir: float(ir[1].nps))
+    mc = monte_carlo([i for i, _ in chosen], RiskInputs(samples=20_000), workers=workers,
+                     per_unit=[r.scm_per_mmbtu for _, r in chosen])  # fmt: skip
+
+    def m(v: float) -> float | None:
+        return None if math.isinf(v) else round(usd_m(v, case), 1)
+
+    return {
+        "note": risk_note_for(mc),
+        "evaluations": mc.evaluations,
+        "designs": [
+            {"design": d.label, "p10_usd_m": m(d.lcc_p10), "p50_usd_m": m(d.lcc_p50),
+             "p90_usd_m": m(d.lcc_p90), "deterministic_usd_m": m(d.deterministic_lcc),
+             "prob_cheapest": round(d.prob_cheapest, 4),
+             "prob_infeasible": round(d.prob_infeasible, 4)}
+            for d in mc.designs
+        ],
+    }  # fmt: skip
+
+
 def reserve_check(case: dict[str, Any]) -> dict[str, float]:
     r = case["reserves"]
     remaining = r["recoverable_tcf"] - r["produced_to_oct_2024_tcf"]
@@ -240,6 +266,8 @@ def main() -> None:
             "best": summarise(s.best, s.best_input, case),
             "by_size": sizes_tbl,
         }
+        if key == "A_note":
+            out["risk"] = risk_on(s, case, args.workers)
 
     # Calibration: scale capital rates so GTCL's design (96 km 24" + 109 km 30") matches its
     # published Tk 4,500 crore. Our engine has one diameter per option, so GTCL's cost is

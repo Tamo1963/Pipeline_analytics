@@ -22,7 +22,7 @@ from typing import Any
 
 from pipeline_analytics.bot.agent import FeasibilityBot, Reply
 
-STUDY_TOOLS = {"run_design_search", "evaluate_design", "run_sensitivity"}
+STUDY_TOOLS = {"run_design_search", "evaluate_design", "run_sensitivity", "run_risk_analysis"}
 DISCLOSURE_WORDS = ("placeholder", "screening", "class 5", "not a budget", "indicative")
 
 

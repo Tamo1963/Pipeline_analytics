@@ -106,6 +106,36 @@ srows = "\n".join(
     for s in sens
 )
 
+risk = d.get("risk") or {"designs": [], "note": ""}
+
+
+def mc(v: float | None) -> str:
+    return "infeasible" if v is None else f"{v:.1f}"
+
+
+rrows = "\n".join(
+    f'<tr><td>{e(r["design"])}</td><td class="num">{mc(r["p10_usd_m"])}</td>'
+    f'<td class="num">{mc(r["p50_usd_m"])}</td><td class="num">{mc(r["p90_usd_m"])}</td>'
+    f'<td class="num">{r["prob_cheapest"]:.0%}</td><td class="num">{r["prob_infeasible"]:.0%}</td></tr>'
+    for r in risk["designs"]
+)
+rtop = max(risk["designs"], key=lambda r: r["prob_cheapest"]) if risk["designs"] else None
+risk_section = (
+    ""
+    if rtop is None
+    else f"""
+<section>
+  <h2><span class="no">6</span>Risk</h2>
+  <p class="col">Unit rates and throughput sampled together, {risk["evaluations"]} design evaluations behind {risk["note"].split(" ")[0]} samples. Every size sees the same samples, so the share of samples in which each size is the cheapest is a fair comparison. <strong>{e(rtop["design"])} is the cheapest in {rtop["prob_cheapest"]:.0%} of samples.</strong></p>
+  <div class="tbl"><table>
+    <thead><tr><th>Design</th><th class="num">P10 US$M</th><th class="num">P50 US$M</th><th class="num">P90 US$M</th><th class="num">Cheapest</th><th class="num">Infeasible</th></tr></thead>
+    <tbody>{rrows}</tbody>
+  </table></div>
+  <p class="caption">Lifecycle cost percentiles. "Infeasible": the percentile falls in samples where that size breaks a limit (gas velocity at the high-flow scenario). {e(risk["note"])}</p>
+</section>
+"""
+)
+
 wins = sorted({s["best_nps"] for s in sens}, key=float)
 page = f"""<title>Bhola–Khulna Pipeline Sizing</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -250,9 +280,10 @@ footer .wrap {{ padding-block:24px; font-size:12px; line-height:18px; color:var(
   <p class="caption">Tariff: constant charge for a 12% post-tax return. The calibrated case scales every capital rate by {cal["capital_rate_factor"]} so that GTCL's own design matches its published Tk 4,500 crore budget.</p>
 </section>
 
+{risk_section}
 <section class="two">
   <div>
-    <h2><span class="no">6</span>Discrepancies in the inputs</h2>
+    <h2><span class="no">7</span>Discrepancies in the inputs</h2>
     <div class="tbl"><table>
       <thead><tr><th>Item</th><th>Note</th><th>GTCL (press)</th></tr></thead>
       <tbody>
@@ -265,7 +296,7 @@ footer .wrap {{ padding-block:24px; font-size:12px; line-height:18px; color:var(
     <p class="caption">The note's reserve figure is a units error: 1,432 billion cubic feet is 1.432 Tcf.</p>
   </div>
   <div>
-    <h2><span class="no">7</span>Absolute cost</h2>
+    <h2><span class="no">8</span>Absolute cost</h2>
     <dl class="kv">
       <dt>GTCL published budget</dt><dd>US$ {cal["gtcl_budget_usd_m"]:.0f}M</dd>
       <dt>This model, GTCL design</dt><dd>US$ {cal["model_gtcl_design_usd_m"]:.0f}M</dd>
@@ -276,7 +307,7 @@ footer .wrap {{ padding-block:24px; font-size:12px; line-height:18px; color:var(
 </section>
 
 <section class="col">
-  <h2><span class="no">8</span>Data that would firm this up</h2>
+  <h2><span class="no">9</span>Data that would firm this up</h2>
   <ol class="next">
     <li><strong>Design flow and its duration</strong>, including any national-grid transit or proven upside reserves. Higher flow favours a larger pipe.</li>
     <li><strong>Field pressure forecast</strong> from Bapex. If supply holds at 62 barg, the optimum drops to 20".</li>
@@ -287,7 +318,7 @@ footer .wrap {{ padding-block:24px; font-size:12px; line-height:18px; color:var(
 </section>
 
 <section class="col">
-  <h2><span class="no">9</span>Main assumptions</h2>
+  <h2><span class="no">10</span>Main assumptions</h2>
   <dl class="kv">
     <dt>Throughput</dt><dd>180 MMSCFD, {d["sensitivity"][0]["case"].split("(")[1].split(",")[0]}</dd>
     <dt>Barishal offtake</dt><dd>1/3 of flow, ≥ 25 barg</dd>

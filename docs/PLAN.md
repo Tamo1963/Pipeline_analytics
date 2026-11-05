@@ -327,7 +327,7 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **5. Optimiser** ✅ | Design search (diameter × grade × MAOP), route iteration loop with convergence, scenario tree, fixed-alignment studies, offtakes, declining supply pressure | Converges on the synthetic AOI; Bhola–Khulna test case run with sensitivities (`studies/bhola_khulna/REPORT.md`) |
 | **6. Feasibility Bot** ✅ (live benchmark pending) | Agent, 9 tools over the engine, prompts, study memory, number guardrail, 30-case benchmark, CLI and Streamlit chat | Offline tests pass (scripted client); live benchmark ≥ 90 % to be run with Claude API credentials |
 | **7. Reports & UI** ✅ | Word/Excel study reports from one report model, app downloads, bot `generate_report` tool, corridor map view, Bhola documents | End-to-end chat-to-report test passes (scripted client); workbook formulas recalculate to the engine total |
-| **8. Hardening** | Monte Carlo, user cost-database management, auth, multi-user projects | — |
+| **8. Hardening** | Monte Carlo, user cost-database management, auth, multi-user projects | ✅ done (`docs/hardening.md`, ADR 0009) |
 
 ---
 
@@ -385,4 +385,12 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 7 complete (`docs/reports.md`): Word and Excel study reports, chat-to-report, corridor map view.
 
-**Next step:** run the bot benchmark with credentials; then Phase 8 (hardening: Monte Carlo risk, project unit-rate management, multi-user projects). Replace the placeholder rates as soon as project rates are available.
+* Phase 8 complete (`docs/hardening.md`, ADR 0009):
+  * Monte Carlo risk by exact linearisation, giving P10/P50/P90 and P(cheapest) in the bot, the app and the reports;
+  * project unit-rate sets with validation, diff, escalation and approval (`pipeline-rates`);
+  * a multi-user project store with roles, append-only history and optimistic concurrency;
+  * a Projects tab with OIDC sign-in, and a local mode when no sign-in is configured.
+
+  Sustaining station CAPEX now carries the same indirects as initial CAPEX, so the Bhola figures were re-run.
+
+**Next steps:** run the bot benchmark with credentials; load project rates (`pipeline-rates new`) in place of the placeholder set; Phase 2c (FE model for fault crossings and PGD).

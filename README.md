@@ -19,7 +19,7 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
 | 6 | Feasibility bot (Claude agent over the engine tools, number guardrail): see [`docs/bot.md`](docs/bot.md) | ✅ built; live benchmark pending credentials |
 | 7 | Reports & UI: Word/Excel study reports, chat-to-report, map view: see [`docs/reports.md`](docs/reports.md) | ✅ done |
-| 8 | Hardening: Monte Carlo, project rate management, multi-user | next |
+| 8 | Hardening: Monte Carlo risk, project unit-rate sets (`pipeline-rates`), multi-user projects with sign-in: see [`docs/hardening.md`](docs/hardening.md) | ✅ done |
 
 ## Development
 
@@ -52,12 +52,13 @@ src/pipeline_analytics/
   codes/        location class (B31.8 840.2 / T4S / OISD-226), MAOP along route
   mechanical/   ALA buried-pipe checks: pressure, soil springs, loads, thermal, buoyancy, seismic
   hydraulics/   liquid & gas pressure profiles, pump/compressor station siting, power
-  cost/         unit-rate sets (placeholder India 2026), BOQ, CAPEX, OPEX
-  economics/    concession cash flows, LCC, tariff, IRR, sensitivity, economic-diameter curve
+  cost/         unit-rate sets (placeholder India 2026), rate library + `pipeline-rates` CLI, BOQ, CAPEX, OPEX
+  economics/    concession cash flows, LCC, tariff, IRR, sensitivity, Monte Carlo risk, economic-diameter curve
   routing/      AOI layers, cost surface, least-cost path, alternatives, extraction, GeoJSON/KML
   optimiser/    design search, route iteration, scenario tree, fixed-alignment studies
   bot/          feasibility bot: Claude agent, tools, guardrail, benchmark (`pipeline-bot`)
   reports/      study report model; Word report and Excel workbook writers
+  projects/     multi-user project store: owners, sharing, append-only versions
   api/          FastAPI service layer (planned)
 apps/streamlit/ UI
 studies/       worked studies (Bhola - Khulna test case)

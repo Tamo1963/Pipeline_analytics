@@ -114,6 +114,44 @@ class SensitivityInput(_In):
     )
 
 
+class RangeIn(_In):
+    low: float = Field(gt=0)
+    mode: float = Field(gt=0)
+    high: float = Field(gt=0)
+
+
+class ThroughputCaseIn(_In):
+    name: str
+    probability: float = Field(gt=0, le=1)
+    factor: float = Field(gt=0)
+
+
+class RiskAnalysisInput(_In):
+    sizes: list[str] | None = Field(
+        default=None,
+        description="sizes to compare (best grade/MAOP of each from the last design search); "
+        "default: the feasible sizes from that search, cheapest first, up to 5",
+    )
+    rate_ranges: (
+        dict[
+            Literal["line_pipe", "construction", "stations", "other_capex", "energy", "o_and_m"],
+            RangeIn,
+        ]
+        | None
+    ) = Field(
+        default=None,
+        description="triangular factor ranges on unit-rate groups; groups not given keep "
+        "the screening defaults",
+    )
+    throughput_cases: list[ThroughputCaseIn] | None = Field(
+        default=None,
+        description="weighted throughput scenarios (probabilities sum to 1); default "
+        "low 0.8 (25%), base 1.0 (50%), high 1.2 (25%)",
+    )
+    samples: int = Field(default=10_000, ge=1_000, le=200_000)
+    seed: int = 1
+
+
 class EmptyInput(_In):
     pass
 
@@ -348,6 +386,82 @@ def run_sensitivity(study: Study, a: SensitivityInput) -> dict[str, Any]:
     return {"cases": rows, "disclosures": study.disclosures()}
 
 
+def run_risk_analysis(study: Study, a: RiskAnalysisInput) -> dict[str, Any]:
+    from pipeline_analytics.economics.risk import (
+        RiskInputs,
+        ThroughputScenario,
+        Triangular,
+        default_groups,
+        monte_carlo,
+    )
+    from pipeline_analytics.reports.model import RiskRow
+
+    s = study.last_search
+    if s is None:
+        raise ValueError("no design search yet: call run_design_search first")
+    best: dict[str, Any] = {}
+    for inp, res in s.evaluated:
+        if res.feasible and (res.nps not in best or res.lcc_pv < best[res.nps][1].lcc_pv):
+            best[res.nps] = (inp, res)
+    if a.sizes:
+        missing = [n for n in a.sizes if n not in best]
+        if missing:
+            raise ValueError(f"no feasible design in the last search for sizes {missing}")
+        chosen = [best[n] for n in a.sizes]
+    else:
+        chosen = sorted(best.values(), key=lambda ir: ir[1].lcc_pv)[:5]
+    groups = default_groups()
+    for g, r in (a.rate_ranges or {}).items():
+        groups[g] = Triangular(low=r.low, mode=r.mode, high=r.high)
+    kw: dict[str, Any] = {"groups": groups, "samples": a.samples, "seed": a.seed}
+    if a.throughput_cases:
+        kw["scenarios"] = [
+            ThroughputScenario(name=c.name, probability=c.probability, factor=c.factor)
+            for c in a.throughput_cases
+        ]
+    inputs = RiskInputs(**kw)
+    per_unit = [res.scm_per_mmbtu if res.throughput_unit == "scm" else 1.0 for _, res in chosen]
+    mc = monte_carlo([i for i, _ in chosen], inputs, per_unit=per_unit)
+    rows = [
+        RiskRow(
+            design=d.label,
+            p10=study.usd_m(d.lcc_p10),
+            p50=study.usd_m(d.lcc_p50),
+            p90=study.usd_m(d.lcc_p90),
+            deterministic=study.usd_m(d.deterministic_lcc),
+            prob_cheapest=d.prob_cheapest,
+            prob_infeasible=d.prob_infeasible,
+        )
+        for d in mc.designs
+    ]
+    from pipeline_analytics.reports.model import risk_note_for
+
+    study.risk_rows = rows
+    study.risk_note = risk_note_for(mc)
+    study.assumptions["risk analysis"] = study.risk_note
+
+    def num(v: float) -> float | str:
+        return round(v, 1) if v != float("inf") else "infeasible"
+
+    return {
+        "designs": [
+            {
+                "design": r.design,
+                "lifecycle_cost_p10_usd_m": num(r.p10),
+                "lifecycle_cost_p50_usd_m": num(r.p50),
+                "lifecycle_cost_p90_usd_m": num(r.p90),
+                "deterministic_lifecycle_cost_usd_m": num(r.deterministic),
+                "probability_cheapest_pct": round(r.prob_cheapest * 100, 1),
+                "probability_infeasible_pct": round(r.prob_infeasible * 100, 1),
+            }
+            for r in rows
+        ],
+        "evaluations": mc.evaluations,
+        "method_note": study.risk_note,
+        "disclosures": study.disclosures(),
+    }
+
+
 def _scale_capital(rates: Any, k: float) -> Any:
     from pipeline_analytics.cost.rates import scale_capital
 
@@ -399,6 +513,8 @@ def generate_report(study: Study, a: GenerateReportInput) -> dict[str, Any]:
         assumptions=[f"{k}: {v}" for k, v in study.assumptions.items()],
         disclosures=study.disclosures()[: 1 if study.rates.placeholder else 0],
         sensitivity=study.sensitivity_rows,
+        risk=study.risk_rows,
+        risk_note=study.risk_note,
         scenarios_evaluated=len(study.tree.results()),
     )
     slug = "".join(ch if ch.isalnum() else "_" for ch in a.title).strip("_")[:60] or "study"
@@ -523,11 +639,23 @@ TOOLS: tuple[Tool, ...] = (
         run_sensitivity,
     ),
     Tool(
+        "run_risk_analysis",
+        (
+            "Monte Carlo risk analysis on the last design search: samples unit-rate groups "
+            "(line pipe, construction, stations, other CAPEX, energy, O&M) from triangular "
+            "ranges and throughput from weighted scenarios. Returns lifecycle-cost P10/P50/P90 "
+            "per size and the probability that each size is the cheapest. Run after "
+            "run_design_search; the result is included in generate_report."
+        ),
+        RiskAnalysisInput,
+        run_risk_analysis,
+    ),
+    Tool(
         "generate_report",
         (
             "Write the study report from the last design search (and sensitivity, if run): a "
             "Word report and an Excel workbook with inputs, method, results by size, CAPEX "
-            "build-up, yearly cash flow and sensitivity. Returns the file paths."
+            "build-up, yearly cash flow, sensitivity and risk. Returns the file paths."
         ),
         GenerateReportInput,
         generate_report,

@@ -105,3 +105,41 @@ def test_report_downloads_and_route_map() -> None:
     labels = [d.proto.label for d in at.get("download_button")]
     assert "Download report (Word)" in labels and "Download workbook (Excel)" in labels
     assert len(at.get("deck_gl_json_chart")) == 1  # corridor map
+
+
+def test_economics_risk_button_and_rate_sets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pipeline_analytics.cost.rate_library import RateLibrary, escalate
+    from pipeline_analytics.cost.rates import placeholder_rates
+
+    monkeypatch.setenv("PIPELINE_RATES_DIR", str(tmp_path))
+    RateLibrary(tmp_path).save("plus2", escalate(placeholder_rates(), 2028, 0.05))
+    at = AppTest.from_file(str(APP), default_timeout=300).run()
+    assert at.selectbox(key="e_rateset").options == ["placeholder", "plus2"]
+    at.multiselect(key="e_sizes").set_value(["20", "24", "28"]).run()
+    at.select_slider(key="e_samples").set_value(2000).run()
+    at.button(key="e_risk").click().run()
+    assert not at.exception
+    top = next(m for m in at.metric if m.label == "Most often cheapest")
+    assert top.value.endswith("barg") and "of samples" in top.delta
+
+
+def test_projects_tab_local_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_PROJECTS_DIR", str(tmp_path))
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    assert any("Local mode" in w.value for w in at.warning)
+    at.text_input(key="p_user").set_value("asha@example.com").run()
+    at.text_input(key="p_new_name").set_value("Demo line").run()
+    at.button(key="p_create").click().run()
+    assert not at.exception
+    assert any("Created Demo line" in s.value for s in at.success)
+    at.text_input(key="p_msg").set_value("second").run()
+    at.button(key="p_save").click().run()
+    assert any("Saved version 2" in s.value for s in at.success)
+    at.button(key="p_load").click().run()
+    assert any("Opened version 2" in s.value for s in at.success)
+    from pipeline_analytics.projects import ProjectStore
+
+    (p,) = ProjectStore(tmp_path).list_for("asha@example.com")
+    assert p.latest_version == 2 and p.owner == "asha@example.com"

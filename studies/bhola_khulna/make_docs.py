@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline_analytics.optimiser import DesignSpace, optimise_design
-from pipeline_analytics.reports import Money, SensitivityRow, report_from_search
+from pipeline_analytics.reports import Money, RiskRow, SensitivityRow, report_from_search
 from pipeline_analytics.reports.docx import write_docx
 from pipeline_analytics.reports.xlsx import write_xlsx
 
@@ -28,6 +28,10 @@ def _study() -> Any:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def inf_if_none(v: float | None) -> float:
+    return float("inf") if v is None else v
 
 
 def main() -> None:
@@ -114,6 +118,19 @@ def main() -> None:
             f"x{summary['calibration']['capital_rate_factor']} (the optimum does not change)."
         ],
         sensitivity=sens,
+        risk=[
+            RiskRow(
+                design=d["design"],
+                p10=inf_if_none(d["p10_usd_m"]),
+                p50=inf_if_none(d["p50_usd_m"]),
+                p90=inf_if_none(d["p90_usd_m"]),
+                deterministic=inf_if_none(d["deterministic_usd_m"]),
+                prob_cheapest=d["prob_cheapest"],
+                prob_infeasible=d["prob_infeasible"],
+            )
+            for d in summary.get("risk", {}).get("designs", [])
+        ],
+        risk_note=summary.get("risk", {}).get("note", ""),
         scenarios_evaluated=summary["evaluations"],
         next_steps=[
             "Confirm design flow and its duration (grid transit, upside reserves) with Petrobangla / GTCL.",

@@ -6,6 +6,7 @@ set is a clearly labelled placeholder; load your own with :func:`load_rates`.
 
 from __future__ import annotations
 
+from datetime import date
 from enum import StrEnum
 from functools import cache
 from importlib import resources
@@ -100,11 +101,25 @@ class OpexRates(_Model):
     insurance_fraction: float = Field(ge=0, lt=1)
 
 
+class RateMeta(_Model):
+    """Who owns a rate set and whether it is approved for use (all optional)."""
+
+    name: str = ""
+    region: str = ""
+    approved_by: str = ""
+    approved_on: date | None = None
+    valid_until: date | None = None
+    notes: str = ""
+    escalated_from: str = ""
+    """Set by ``rate_library.escalate``: the source set and the indices applied."""
+
+
 class UnitRates(_Model):
     currency: str
     base_year: int
     placeholder: bool
     source: str
+    meta: RateMeta = Field(default_factory=RateMeta)
     line_pipe: LinePipeRates
     coating_per_m2: dict[str, float]
     concrete_coating_per_m3: float = Field(ge=0)

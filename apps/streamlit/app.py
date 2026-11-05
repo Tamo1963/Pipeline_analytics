@@ -70,7 +70,7 @@ st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
-bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab = st.tabs(
+bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab, proj_tab = st.tabs(
     [
         "Feasibility bot",
         "Study basis",
@@ -79,6 +79,7 @@ bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab = st.tab
         "Class location & hydraulics",
         "Economics",
         "Route",
+        "Projects",
     ]
 )
 
@@ -462,8 +463,38 @@ def _curve(base_json: str, sizes: tuple[str, ...]) -> list[OptionResult]:
     return economic_diameter_curve(OptionInput.model_validate_json(base_json), sizes)
 
 
+@st.cache_data(show_spinner="Running Monte Carlo...")
+def _risk(designs_json: tuple[str, ...], samples: int, per_unit: tuple[float, ...]) -> Any:
+    from pipeline_analytics.economics.risk import RiskInputs, monte_carlo
+
+    designs = [OptionInput.model_validate_json(j) for j in designs_json]
+    return monte_carlo(designs, RiskInputs(samples=samples), per_unit=list(per_unit))
+
+
 with econ_tab:
-    e_rates = placeholder_rates()
+    from pipeline_analytics.cost.rate_library import RateLibrary, validate_rates
+
+    rate_lib = RateLibrary()
+    e_rate_name = st.selectbox(
+        "Unit-rate set",
+        rate_lib.names(),
+        key="e_rateset",
+        help="Rate sets live in ./rates (or $PIPELINE_RATES_DIR); manage them with the "
+        "pipeline-rates command.",
+    )
+    try:
+        e_rates = rate_lib.load(e_rate_name)
+    except (ValueError, FileNotFoundError) as e:
+        st.error(f"Could not load rate set {e_rate_name!r}: {e}")
+        e_rates = placeholder_rates()
+    findings = validate_rates(e_rates, reference=placeholder_rates())
+    if not e_rates.placeholder:
+        status = (f"approved by {e_rates.meta.approved_by} on {e_rates.meta.approved_on}"
+                  if e_rates.meta.approved_by else "not approved")  # fmt: skip
+        st.caption(f"{e_rates.source}; {e_rates.currency} {e_rates.base_year}; {status}.")
+    if any(f.level != "info" for f in findings) and not e_rates.placeholder:
+        with st.expander(f"Rate-set checks: {len(findings)} finding(s)"):
+            st.dataframe([f.model_dump() for f in findings], hide_index=True)
     if e_rates.placeholder:
         st.warning(
             "PLACEHOLDER unit rates (India, INR, 2026): order-of-magnitude values for testing "
@@ -593,9 +624,58 @@ with econ_tab:
                 ],
                 hide_index=True,
             )
+        # Monte Carlo risk on the best design of each feasible size
+        st.markdown("**Risk: lifecycle cost under cost and throughput uncertainty**")
+        k1, k2 = st.columns([1, 3])
+        e_samples = k1.select_slider("Samples", [2_000, 5_000, 10_000, 20_000], 10_000,
+                                     key="e_samples")  # fmt: skip
+        ok_sizes = [n for n, r in zip(e_sizes, results, strict=True) if r.feasible]
+        risk_key = (base.model_dump_json(), tuple(ok_sizes), e_samples)
+        if k2.button("Run Monte Carlo risk analysis", key="e_risk", disabled=not ok_sizes):
+            designs = tuple(
+                OptionInput.model_validate({**base.model_dump(), "nps": n}).model_dump_json()
+                for n in ok_sizes
+            )
+            per_u = tuple(
+                r.scm_per_mmbtu if e_service is Service.GAS else 1.0
+                for r in results if r.feasible
+            )  # fmt: skip
+            st.session_state.e_risk_result = (risk_key, _risk(designs, e_samples, per_u))
+        risk_res = None
+        if st.session_state.get("e_risk_result", (None,))[0] == risk_key:
+            risk_res = st.session_state.e_risk_result[1]
+            st.dataframe(
+                [
+                    {
+                        "Design": d.label,
+                        "P10 ₹ cr": None if d.lcc_p10 == float("inf") else round(crore(d.lcc_p10)),
+                        "P50 ₹ cr": None if d.lcc_p50 == float("inf") else round(crore(d.lcc_p50)),
+                        "P90 ₹ cr": None if d.lcc_p90 == float("inf") else round(crore(d.lcc_p90)),
+                        "Deterministic ₹ cr": round(crore(d.deterministic_lcc)),
+                        "Cheapest %": round(d.prob_cheapest * 100, 1),
+                        "Infeasible %": round(d.prob_infeasible * 100, 1),
+                    }
+                    for d in risk_res.designs
+                ],
+                hide_index=True,
+            )
+            top = max(risk_res.designs, key=lambda d: d.prob_cheapest)
+            st.metric("Most often cheapest", top.label, f"{top.prob_cheapest:.0%} of samples")
+            from pipeline_analytics.reports import risk_note_for
+
+            st.caption(risk_note_for(risk_res))
+        else:
+            st.caption("Samples unit-rate groups and throughput scenarios; P(cheapest) "
+                       "compares sizes on the same samples.")  # fmt: skip
+
         # study report downloads (same report model as the bot and study scripts)
         try:
-            from pipeline_analytics.reports import Money, report_from_options
+            from pipeline_analytics.reports import (
+                Money,
+                report_from_options,
+                risk_note_for,
+                risk_rows,
+            )
             from pipeline_analytics.reports.docx import write_docx
             from pipeline_analytics.reports.xlsx import write_xlsx
 
@@ -618,6 +698,8 @@ with econ_tab:
                 disclosures=["PLACEHOLDER unit rates (screening only)."]
                 if e_rates.placeholder
                 else [],
+                risk=risk_rows(risk_res, Money.inr_crore()) if risk_res else (),
+                risk_note=risk_note_for(risk_res) if risk_res else "",
             )
             b_docx, b_xlsx = io.BytesIO(), io.BytesIO()
             write_docx(rep, b_docx)
@@ -832,3 +914,167 @@ with bot_tab:
                         fpath.rsplit("/", 1)[-1],
                         key=f"bot_{kind}",
                     )
+
+
+# ------------------------------------------------------------------- projects
+def _auth_configured() -> bool:
+    try:
+        return "auth" in st.secrets
+    except Exception:  # no secrets file
+        return False
+
+
+def _current_user() -> str | None:
+    """Signed-in e-mail with [auth] configured; otherwise a self-declared local name."""
+    if _auth_configured():
+        if not st.user.is_logged_in:
+            st.info("Sign in to see and save your projects.")
+            st.button("Sign in", on_click=st.login, key="p_login")
+            return None
+        u1, u2 = st.columns([4, 1])
+        u1.caption(f"Signed in as {st.user.get('email') or st.user.get('name')}")
+        u2.button("Sign out", on_click=st.logout, key="p_logout")
+        return str(st.user.get("email") or st.user.get("name"))
+    st.warning(
+        "Local mode: no sign-in is configured, so a name is not verified. Anyone using this "
+        "app can type any name. Add an [auth] section to .streamlit/secrets.toml for real "
+        "accounts (see docs/hardening.md)."
+    )
+    name = st.text_input("Your name or e-mail", key="p_user").strip()
+    return name or None
+
+
+with proj_tab:
+    from pipeline_analytics.projects import (
+        AccessDeniedError,
+        ProjectNotFoundError,
+        ProjectStore,
+        VersionConflictError,
+    )
+    from pipeline_analytics.projects.payload import (
+        chat_of,
+        payload_to_study,
+        study_to_payload,
+        summary_of,
+    )
+
+    st.caption(
+        "Projects keep a feasibility-bot study (basis, route, rates, results) with its full "
+        "version history. Share a project with colleagues as viewer or editor."
+    )
+    user = _current_user()
+    store = ProjectStore()
+    the_bot = st.session_state.get("bot")
+    if user:
+        with st.expander("New project"):
+            n_name = st.text_input("Project name", key="p_new_name")
+            n_desc = st.text_input("Description", key="p_new_desc")
+            n_cur = st.checkbox("Start from the current bot study", value=the_bot is not None,
+                                disabled=the_bot is None, key="p_new_cur")  # fmt: skip
+            if st.button("Create project", key="p_create", disabled=not n_name.strip()):
+                payload = (study_to_payload(the_bot.study, st.session_state.get("chat", []))
+                           if n_cur and the_bot is not None else None)  # fmt: skip
+                created = store.create(n_name, user, n_desc, payload=payload)
+                st.session_state.p_open = (created.id, created.latest_version)
+                st.success(f"Created {created.name}.")
+
+        projects = store.list_for(user)
+        if not projects:
+            st.info("No projects yet.")
+        else:
+            st.dataframe(
+                [
+                    {
+                        "Project": p.name,
+                        "Your role": p.role_of(user),
+                        "Owner": p.owner,
+                        "Version": p.latest_version,
+                        "Last saved by": p.latest_by,
+                        "Updated (UTC)": p.updated_at.strftime("%Y-%m-%d %H:%M"),
+                    }
+                    for p in projects
+                ],
+                hide_index=True,
+            )
+            by_id = {p.id: p for p in projects}
+            pid = st.selectbox("Project", list(by_id), format_func=lambda i: by_id[i].name,
+                               key="p_pick")  # fmt: skip
+            proj = by_id[pid]
+            role = proj.role_of(user)
+            hist = store.history(pid, user)
+            if hist:
+                st.dataframe(
+                    [
+                        {"Version": h.version, "Author": h.author, "Message": h.message,
+                         "Saved (UTC)": h.created_at.strftime("%Y-%m-%d %H:%M")}
+                        for h in reversed(hist)
+                    ],
+                    hide_index=True,
+                )  # fmt: skip
+            opened = st.session_state.get("p_open")
+            c1, c2 = st.columns(2)
+            with c1:
+                version = st.selectbox(
+                    "Version",
+                    [h.version for h in reversed(hist)] or [0],
+                    key=f"p_version_{pid}_{proj.latest_version}",
+                )
+                if st.button("Open in the bot", key="p_load", disabled=not hist or the_bot is None):
+                    assert the_bot is not None
+                    v = store.load(pid, user, version)
+                    payload_to_study(v.payload, the_bot.study)
+                    the_bot.messages = []  # the model starts fresh; the study is restored
+                    st.session_state.chat = chat_of(v.payload)
+                    st.session_state.p_open = (pid, proj.latest_version)
+                    s = summary_of(v.payload)
+                    st.success(f"Opened version {v.version}: {s['route'] or 'no route yet'}"
+                               f"{', best ' + s['best'] if s['best'] else ''}. Run the design "
+                               "search again before generating a report.")  # fmt: skip
+                writer = role in ("owner", "editor")
+                can_restore = writer and bool(hist) and version != proj.latest_version
+                if can_restore and st.button(f"Restore version {version} as the latest",
+                                             key="p_restore"):  # fmt: skip
+                    store.restore(pid, user, version, expected_version=proj.latest_version)
+                    st.rerun()
+            with c2:
+                if role in ("owner", "editor"):
+                    msg = st.text_input("Save message", key="p_msg")
+                    base_v = opened[1] if opened and opened[0] == pid else None
+                    can_save = the_bot is not None and (base_v is not None or not hist)
+                    if not can_save and the_bot is not None:
+                        st.caption("Open this project in the bot before saving to it.")
+                    if st.button("Save the bot study as a new version", key="p_save",
+                                 disabled=not can_save):  # fmt: skip
+                        assert the_bot is not None
+                        try:
+                            v = store.save(
+                                pid, user,
+                                study_to_payload(the_bot.study, st.session_state.get("chat", [])),
+                                msg, expected_version=base_v or 0,
+                            )  # fmt: skip
+                        except VersionConflictError as e:
+                            st.error(str(e))
+                        except AccessDeniedError as e:
+                            st.error(str(e))
+                        else:
+                            st.session_state.p_open = (pid, v.version)
+                            st.success(f"Saved version {v.version}.")
+                else:
+                    st.caption("You can view this project; ask the owner for editor access.")
+            if role == "owner":
+                with st.expander("Sharing"):
+                    s1, s2, s3 = st.columns([3, 1, 1])
+                    who = s1.text_input("Share with (e-mail or name)", key="p_share_who")
+                    r_ = s2.selectbox("Role", ["viewer", "editor"], key="p_share_role")
+                    if s3.button("Share", key="p_share", disabled=not who.strip()):
+                        try:
+                            store.share(pid, user, who, r_)  # type: ignore[arg-type]
+                            st.rerun()
+                        except (ValueError, ProjectNotFoundError) as e:
+                            st.error(str(e))
+                    for other, orole in proj.shared_with.items():
+                        o1, o2 = st.columns([4, 1])
+                        o1.write(f"{other}: {orole}")
+                        if o2.button("Remove", key=f"p_unshare_{other}"):
+                            store.unshare(pid, user, other)
+                            st.rerun()

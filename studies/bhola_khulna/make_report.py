@@ -36,6 +36,32 @@ def size_table(by_size: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def risk_md(risk: dict[str, Any] | None) -> str:
+    if not risk:
+        return ""
+    rows = "\n".join(
+        f"| {r['design']} | {_fmt(r['p10_usd_m'])} | {_fmt(r['p50_usd_m'])} "
+        f"| {_fmt(r['p90_usd_m'])} | {_fmt(r['deterministic_usd_m'])} "
+        f"| {r['prob_cheapest']:.0%} | {r['prob_infeasible']:.0%} |"
+        for r in risk["designs"]
+    )
+    top = max(risk["designs"], key=lambda r: r["prob_cheapest"])
+    return f"""
+
+## 7. Risk (Monte Carlo, route A)
+
+The best grade and MAOP of each size, under unit-rate and throughput uncertainty. All sizes
+see the same samples, so "cheapest" compares like with like. **{top["design"]} is the
+cheapest in {top["prob_cheapest"]:.0%} of samples.**
+
+| Design | P10 US$M | P50 US$M | P90 US$M | Deterministic US$M | Cheapest | Infeasible |
+|---|---|---|---|---|---|---|
+{rows}
+
+{risk["note"]} "-": the percentile falls in samples where that design is infeasible.
+"""
+
+
 def main() -> None:
     d = json.loads((HERE / "results" / "summary.json").read_text())
     a, b = d["alignments"]["A_note"], d["alignments"]["B_gtcl"]
@@ -136,9 +162,10 @@ Sizes 20-30", grades X65/X70, both MAOPs.
             f"| {_fmt(s['best_tariff_usd_per_mmbtu'])} |"
             for s in sens
         )
+        + risk_md(d.get("risk"))
         + """
 
-## 7. What would change the answer, and what data is needed
+## 8. What would change the answer, and what data is needed
 
 1. **Throughput.** Larger diameters gain as design flow rises. At 260 MMSCFD the optimum moves
    up one size and the gap to 30" narrows (section 6). A 30" line pays off only for flows well
@@ -152,7 +179,7 @@ Sizes 20-30", grades X65/X70, both MAOPs.
    breakdown) via a rate file; no code changes are needed.
 5. **Offtakes and delivery pressures** at Barishal and Khulna (grid entry pressure).
 
-## 8. Reproduce
+## 9. Reproduce
 
 ```bash
 uv run python studies/bhola_khulna/run_study.py --workers 4

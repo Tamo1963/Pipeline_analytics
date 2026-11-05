@@ -95,9 +95,26 @@ def test_basis_route_search_evaluate_sensitivity() -> None:
     })  # fmt: skip
     assert [c["case"] for c in sens["cases"]] == ["longer", "dearer capital"]
     assert "compare" in sens["cases"][0]
+    risk = call(s, "run_risk_analysis", {
+        "samples": 2000,
+        "rate_ranges": {"line_pipe": {"low": 0.9, "mode": 1.0, "high": 1.5}},
+    })  # fmt: skip
+    probs = [d["probability_cheapest_pct"] for d in risk["designs"]]
+    assert abs(sum(probs) - 100) < 0.5  # one design is cheapest in every sample
+    assert risk["evaluations"] == len(risk["designs"]) * 3 * 7  # 1 + 6 groups, 3 scenarios
+    assert "line_pipe 0.9-1-1.5" in risk["method_note"]
+    assert len(s.risk_rows) == len(risk["designs"])
     st = call(s, "get_study", {})
     assert st["scenarios_evaluated"] >= 3 + 1 + 4
     assert TOOL_BY_NAME["get_study"].name == "get_study"
+
+
+def test_risk_analysis_needs_a_search_and_known_sizes() -> None:
+    text, err = run_tool(Study(), "run_risk_analysis", {})
+    assert err and "run_design_search" in text
+    text, err = run_tool(Study(), "run_risk_analysis", {"rate_ranges": {"steel": {
+        "low": 1, "mode": 1, "high": 2}}})  # fmt: skip
+    assert err and "invalid input" in text
 
 
 def test_generate_report_needs_a_search() -> None:
