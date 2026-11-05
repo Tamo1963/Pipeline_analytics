@@ -1,0 +1,70 @@
+# PLACEHOLDER screening unit rates: India, INR, base year 2026.
+# Order-of-magnitude values for building and testing the cost engine only.
+# They are NOT market quotations. Replace with project / company rates before
+# any estimate is shared (copy this file, edit, and load it with
+# pipeline_analytics.cost.load_rates(path)).
+currency: INR
+base_year: 2026
+placeholder: true
+source: "Placeholder screening rates compiled for software development; not market data"
+
+line_pipe:
+  # bare line pipe delivered to site, X65 SAWL basis
+  base_rate_per_tonne: 90000
+  grade_factor: {B: 0.90, X42: 0.92, X46: 0.93, X52: 0.95, X56: 0.97, X60: 0.98, X65: 1.00, X70: 1.03, X80: 1.10, X90: 1.20, X100: 1.30, X120: 1.45}
+  process_factor: {SMLS: 1.40, HFW: 0.95, SAWL: 1.00, SAWH: 0.92}
+
+coating_per_m2: {3LPE: 1000, 3LPP: 1500, FBE: 800}
+concrete_coating_per_m3: 15000
+
+# mainline construction (lay, weld, NDT, lower, backfill, hydrotest, restoration)
+laying_per_inch_km: 120000
+terrain_factor: {flat: 1.0, rolling: 1.2, hilly: 1.8, rock: 2.5, marsh: 2.0, urban: 2.2, forest: 1.5}
+
+crossings:
+  hdd_per_inch_m: 2000
+  open_cut_river_per_inch_m: 800
+  per_crossing:
+    national_highway: 4.0e+6
+    state_highway: 1.5e+6
+    minor_road: 4.0e+5
+    railway: 6.0e+6
+    canal: 1.0e+6
+    foreign_pipeline: 5.0e+5
+
+stations:
+  compressor_fixed: 5.0e+8
+  compressor_per_kw: 150000
+  pump_fixed: 2.0e+8
+  pump_per_kw: 60000
+  installed_power_factor: 1.5   # installed / required power (standby units, e.g. 2+1)
+  terminal_each: 3.0e+8         # dispatch and receipt terminals
+  sectionalising_valve_each: 1.5e+7
+  scraper_station_each: 4.0e+7
+
+per_km:
+  cathodic_protection: 2.0e+5
+  scada_telecom: 8.0e+5
+
+land:
+  row_width_m: 20
+  rou_compensation_per_ha: {agricultural: 3.0e+5, forest: 1.5e+6, urban: 5.0e+6, wasteland: 5.0e+4}
+  station_land_ha: 2.0
+  permanent_land_per_ha: 5.0e+6
+
+indirects:
+  taxes: 0.18            # GST on direct costs (excluding land)
+  engineering_pmc: 0.07  # on direct costs
+  owners_cost: 0.02      # on direct costs + land
+  contingency: 0.10      # on everything above
+
+opex:
+  electricity_per_kwh: 8.0
+  fuel_gas_per_scm: 25.0
+  line_om_per_km_year: 1.5e+5
+  station_om_fraction: 0.03     # of station CAPEX per year, excluding energy
+  manpower_per_station_year: 3.0e+7
+  manpower_base_year: 1.0e+8    # control room, admin, regional offices
+  ili_per_km_run: 1.2e+5
+  ili_interval_years: 5
+  insurance_fraction: 0.003     # of cumulative CAPEX per year

@@ -320,7 +320,7 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 | **2a. Mechanical design (ALA)** ✅ | Pressure design (B31.4/B31.8 + OISD/T4S factors) and ALA buried-pipe checks, `assess_segment()`, Streamlit tab | Every formula matches an independent hand calculation |
 | **2b. Class location & hydraulics** ✅ | Location class (B31.8 840.2 / T4S), MAOP along route, liquid & gas hydraulics, station siting, power and fuel | Gas flow equation matches numerical integration within 0.01%; all formulas hand-checked |
 | **2c. PGD finite-element model** | Fault crossings, transverse PGD, settlement using the ALA soil springs | Agreement with published benchmark cases |
-| **3. Cost & economics** (3 wk) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity | Hand-checked spreadsheet reconciles to the cent; economic-diameter curve reproduces the textbook U-shape |
+| **3. Cost & economics** ✅ (placeholder rates) | BOQ builder, CAPEX/OPEX, concession cash-flow model, LCC, tariff, sensitivity, end-to-end option evaluation | BOQ, OPEX, PV, IRR and tariff match hand calculations in tests; economic-diameter curve is U-shaped (interior optimum asserted). An independent spreadsheet reconciliation is still to do once project rates exist |
 | **4. Routing engine** (5–6 wk) | Cost-surface builder from open data, least-cost path, k-alternatives, profile/crossing/class extraction, KML export | On a sample AOI, produces 3+ distinct corridors in < 2 min; crossings counted correctly against manual check |
 | **5. Optimiser** (3–4 wk) | Inner enumeration/MILP, outer re-weighting loop, scenario tree, convergence | Converges on a test case; demonstrates a route change driven by OPEX |
 | **6. Feasibility Bot** (4 wk) | Agent, tool layer, prompts, study memory, guardrails, eval set of 30 benchmark queries | ≥ 90% of eval queries answered with tool-backed numbers and no fabricated values |
@@ -373,4 +373,6 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
 * Phase 2b complete: class location and hydraulics with station siting (`docs/hydraulics-class-location.md`).
 
-**Next step:** Phase 3, cost and lifecycle economics, which closes the CAPEX + OPEX loop. Phase 2c (PGD finite-element model) follows when routes cross mapped faults or slide zones.
+* Phase 3 complete with **placeholder rates** (`docs/cost-economics.md`, ADR 0006): CAPEX/OPEX, concession cash flows, LCC, levelised cost, post-tax tariff, tornado, and the end-to-end economic-diameter curve.
+
+**Next step:** Phase 4, the route / alignment engine (GIS cost surface, least-cost path, alternative corridors), so route quantities come from the alignment instead of being entered by hand. Replace the placeholder rates as soon as project rates are available.

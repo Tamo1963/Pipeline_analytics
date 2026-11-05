@@ -14,7 +14,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 2a | Mechanical design per ALA buried-pipe guidelines: see [`docs/mechanical-ala.md`](docs/mechanical-ala.md) | ✅ core checks done |
 | 2b | Class location and liquid/gas hydraulics with station siting: see [`docs/hydraulics-class-location.md`](docs/hydraulics-class-location.md) | ✅ done |
 | 2c | FE model for fault crossings, transverse PGD, settlement | planned |
-| 3 | Cost and lifecycle economics | next |
+| 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
+| 4 | Route / alignment engine (GIS) | next |
 
 ## Development
 
@@ -47,7 +48,8 @@ src/pipeline_analytics/
   codes/        location class (B31.8 840.2 / T4S / OISD-226), MAOP along route
   mechanical/   ALA buried-pipe checks: pressure, soil springs, loads, thermal, buoyancy, seismic
   hydraulics/   liquid & gas pressure profiles, pump/compressor station siting, power
-  cost/ economics/                                   (Phase 3)
+  cost/         unit-rate sets (placeholder India 2026), BOQ, CAPEX, OPEX
+  economics/    concession cash flows, LCC, tariff, IRR, sensitivity, economic-diameter curve
   routing/      GIS least-cost alignment             (Phase 4)
   optimiser/    CAPEX+OPEX iteration loop            (Phase 5)
   bot/          feasibility specialist bot           (Phase 6)

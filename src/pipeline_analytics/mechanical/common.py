@@ -30,7 +30,8 @@ WATER_DENSITY = 1000.0  # kg/m^3 (fresh water)
 
 
 class _Frozen(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # ser_json_inf_nan: inf (e.g. "no limit") survives a JSON round trip
+    model_config = ConfigDict(frozen=True, extra="forbid", ser_json_inf_nan="constants")
 
 
 class SteelProperties(_Frozen):

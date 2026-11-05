@@ -72,3 +72,11 @@ def test_hydraulics_tab_liquid() -> None:
     assert not at.exception
     delivery = next(m for m in at.metric if m.label == "Delivery pressure (barg)")
     assert float(delivery.value) >= 2.0
+
+
+def test_economics_tab_renders_with_placeholder_warning() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=60).run()
+    assert not at.exception
+    assert any("PLACEHOLDER unit rates" in w.value for w in at.warning)
+    best = next(m for m in at.metric if m.label == "Lowest lifecycle cost")
+    assert best.value.endswith('"')

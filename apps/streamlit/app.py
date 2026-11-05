@@ -17,6 +17,16 @@ from pipeline_analytics.codes.class_location import (
 )
 from pipeline_analytics.core.jurisdiction import Service, StudyDefaults, code_basis
 from pipeline_analytics.core.units import Q_
+from pipeline_analytics.cost import crore, placeholder_rates
+from pipeline_analytics.economics import (
+    Concession,
+    OptionInput,
+    OptionResult,
+    best_option,
+    economic_diameter_curve,
+    option_tornado,
+    ramp_profile,
+)
 from pipeline_analytics.hydraulics import (
     GasStationInput,
     HydraulicsError,
@@ -44,8 +54,8 @@ st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
-basis_tab, library_tab, mech_tab, hyd_tab = st.tabs(
-    ["Study basis", "Pipe library", "Mechanical (ALA)", "Class location & hydraulics"]
+basis_tab, library_tab, mech_tab, hyd_tab, econ_tab = st.tabs(
+    ["Study basis", "Pipe library", "Mechanical (ALA)", "Class location & hydraulics", "Economics"]
 )
 
 # --------------------------------------------------------------------- basis
@@ -419,3 +429,154 @@ with hyd_tab:
             ],
             hide_index=True,
         )
+
+
+# ------------------------------------------------------------------ economics
+@st.cache_data(show_spinner="Evaluating diameters...")
+def _curve(base_json: str, sizes: tuple[str, ...]) -> list[OptionResult]:
+    """Cached economic-diameter curve, keyed on the full validated input."""
+    return economic_diameter_curve(OptionInput.model_validate_json(base_json), sizes)
+
+
+with econ_tab:
+    e_rates = placeholder_rates()
+    if e_rates.placeholder:
+        st.warning(
+            "PLACEHOLDER unit rates (India, INR, 2026): order-of-magnitude values for testing "
+            "the method, not market data. Results are AACE Class 5 at best. Load project "
+            "rates before sharing any number."
+        )
+    st.caption(
+        "Lifecycle cost = PV(CAPEX) + PV(OPEX) - PV(residual) over the concession, for each "
+        "diameter. Uses the route profile and buildings from the previous tab."
+    )
+    e1, e2, e3 = st.columns(3)
+    with e1:
+        e_service = Service(st.selectbox("Service", [s.value for s in Service], key="e_service"))
+        all_nps = [s.nps for s in lib.sizes if s.nps_value >= 8]
+        e_sizes = st.multiselect(
+            "Diameters (NPS)", all_nps, default=["16", "20", "24", "28", "30", "36"], key="e_sizes"
+        )
+        e_grade = st.selectbox(
+            "Grade (PSL2)", [g.name for g in lib.find_grades(psl=2)], index=7, key="e_grade"
+        )
+        e_p = st.number_input("Design pressure (barg)", value=92.0, min_value=1.0, key="e_p")
+    with e2:
+        unit = "MMSCMD" if e_service is Service.GAS else "MMTPA"
+        e_q0 = st.number_input(f"Year-1 throughput ({unit})", value=6.0, min_value=0.1, key="e_q0")
+        e_q1 = st.number_input(
+            f"Plateau throughput ({unit})", value=10.0, min_value=0.1, key="e_q1"
+        )
+        e_ramp = st.number_input("Ramp-up years", value=8, min_value=1, max_value=30, key="e_ramp")
+        e_years = st.number_input(
+            "Operating years (concession)", value=25, min_value=5, max_value=40, key="e_years"
+        )
+    with e3:
+        e_rate = st.number_input("Discount rate (real)", value=0.10, step=0.01, key="e_rate")
+        e_target = st.number_input("Target post-tax return", value=0.12, step=0.01, key="e_target")
+        e_supply = st.number_input("Supply pressure (barg)", value=40.0, key="e_supply")
+        e_deliv = st.number_input("Delivery pressure min (barg)", value=30.0, key="e_deliv")
+
+    try:
+        e_prof = Profile(
+            chainage_m=tuple(float(x) * 1000 for x in prof_df["chainage_km"]),
+            elevation_m=tuple(float(z) for z in prof_df["elevation_m"]),
+        ).resample(5000)
+        e_segs: tuple = ()  # type: ignore[type-arg]
+        if e_service is Service.GAS:
+            e_segs = tuple(classify_route(e_prof.length_m, buildings, step_m=50))
+        base = OptionInput(
+            service=e_service,
+            nps=e_sizes[0] if e_sizes else 24,
+            grade=e_grade,
+            design_pressure_pa_g=e_p * 1e5,
+            profile=e_prof,
+            class_segments=e_segs,
+            throughput=ramp_profile(e_q0, e_q1, int(min(e_ramp, e_years)), int(e_years)),
+            gas_stations=GasStationInput(
+                supply_pressure_pa_g=e_supply * 1e5, delivery_min_pa_g=e_deliv * 1e5
+            ),
+            pump_stations=PumpStationInput(
+                supply_pressure_pa_g=e_supply * 1e5, delivery_min_pa_g=e_deliv * 1e5
+            ),
+            concession=Concession(operating_years=int(e_years), discount_rate=e_rate),
+            rates=e_rates,
+        )
+        results = _curve(base.model_dump_json(), tuple(e_sizes))
+        best = best_option(results)
+    except (ValueError, NameError) as e:
+        st.error(str(e))
+    else:
+        per = "₹/MMBtu" if e_service is Service.GAS else "₹/t"
+        rows: list[dict[str, object]] = []
+        for r in results:
+            if not r.feasible:
+                rows.append({"NPS": r.nps, "Feasible": "no", "Issue": r.issues[0]})
+                continue
+            lev = r.levelised_cost_per_mmbtu if e_service is Service.GAS else r.levelised_cost
+            rows.append(
+                {
+                    "NPS": r.nps,
+                    "Feasible": "yes",
+                    "Wall mm": ", ".join(f"{w.wt_m * 1e3:.1f}" for w in r.walls),
+                    "Pipe t": round(r.pipe_tonnes),
+                    "CAPEX ₹ cr": round(crore(r.capex.total)) if r.capex else None,
+                    "PV CAPEX ₹ cr": round(crore(r.pv_capex)),
+                    "PV OPEX ₹ cr": round(crore(r.pv_opex)),
+                    "LCC ₹ cr": round(crore(r.lcc_pv)),
+                    "Max stations": max(h.stations for h in r.hydraulics),
+                    f"Levelised {per}": round(lev, 2),
+                }
+            )
+        st.dataframe(rows, hide_index=True)
+        ok = [r for r in results if r.feasible]
+        st.line_chart(
+            pd.DataFrame(
+                {
+                    "NPS": [r.nps for r in ok],
+                    "PV CAPEX": [crore(r.pv_capex) for r in ok],
+                    "PV OPEX": [crore(r.pv_opex) for r in ok],
+                    "LCC": [crore(r.lcc_pv) for r in ok],
+                }
+            ).set_index("NPS")
+        )
+        cf = best.cashflow
+        assert cf is not None and best.capex is not None
+        tariff = cf.tariff_for_return(e_target)
+        f1, f2, f3 = st.columns(3)
+        f1.metric("Lowest lifecycle cost", f'{best.nps}"', f"₹ {crore(best.lcc_pv):,.0f} cr PV")
+        lev_best = (
+            best.levelised_cost_per_mmbtu if e_service is Service.GAS else best.levelised_cost
+        )
+        f2.metric(f"Levelised cost ({per})", f"{lev_best:,.2f}")
+        tariff_shown = tariff * best.scm_per_mmbtu if e_service is Service.GAS else tariff
+        f3.metric(f"Tariff for {e_target:.0%} post-tax ({per})", f"{tariff_shown:,.2f}")
+        st.markdown(f'**CAPEX breakdown, {best.nps}" (₹ crore)**')
+        st.bar_chart(
+            pd.DataFrame({"₹ crore": {k: crore(v) for k, v in best.capex.by_group().items()}})
+        )
+        with st.expander("Cash flow (₹ crore, real)"):
+            st.dataframe(
+                [
+                    {
+                        "Year": y.year,
+                        "Phase": "operation" if y.operating else "construction",
+                        "CAPEX": round(crore(y.capex), 1),
+                        "OPEX": round(crore(y.opex), 1),
+                        "Throughput": y.throughput,
+                    }
+                    for y in cf.years
+                ],
+                hide_index=True,
+            )
+        if st.button("Run sensitivity (±20 %) on the best option", key="e_tornado"):
+            best_inp = base.model_copy(update={"nps": best.nps})
+            torn = option_tornado(best_inp, 0.2)
+            scale = best.scm_per_mmbtu if e_service is Service.GAS else 1.0
+            st.dataframe(
+                [
+                    {"Parameter": n, f"-20 % ({per})": lo * scale, f"+20 % ({per})": hi * scale}
+                    for n, lo, hi in torn
+                ],
+                hide_index=True,
+            )
