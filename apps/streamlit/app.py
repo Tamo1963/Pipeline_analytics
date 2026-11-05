@@ -90,6 +90,15 @@ bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab, proj_ta
     ]
 )
 
+
+def _press_to_run(button: str, key: str) -> None:
+    """Heavy tabs compute only on request; say so, and whether inputs changed since."""
+    if key in st.session_state:
+        st.info(f"Inputs changed since the last run: press **{button}** to update.")
+    else:
+        st.info(f"Set the inputs, then press **{button}**.")
+
+
 # --------------------------------------------------------------------- basis
 with basis_tab:
     defaults = StudyDefaults()
@@ -787,6 +796,7 @@ with econ_tab:
         e_supply = st.number_input("Supply pressure (barg)", value=40.0, key="e_supply")
         e_deliv = st.number_input("Delivery pressure min (barg)", value=30.0, key="e_deliv")
 
+    e_ok = False
     try:
         e_prof = Profile(
             chainage_m=tuple(float(x) * 1000 for x in prof_df["chainage_km"]),
@@ -812,11 +822,18 @@ with econ_tab:
             concession=Concession(operating_years=int(e_years), discount_rate=e_rate),
             rates=e_rates,
         )
-        results = _curve(base.model_dump_json(), tuple(e_sizes))
-        best = best_option(results)
+        e_key = (base.model_dump_json(), tuple(e_sizes))
+        if st.button("Evaluate diameters", key="e_go", type="primary"):
+            st.session_state.e_key = e_key
+        if st.session_state.get("e_key") == e_key:
+            results = _curve(base.model_dump_json(), tuple(e_sizes))
+            best = best_option(results)
+            e_ok = True
+        else:
+            _press_to_run("Evaluate diameters", "e_key")
     except (ValueError, NameError) as e:
         st.error(str(e))
-    else:
+    if e_ok:
         per = "₹/MMBtu" if e_service is Service.GAS else "₹/t"
         rows: list[dict[str, object]] = []
         for r in results:
@@ -1049,11 +1066,19 @@ with route_tab:
         throughput=ramp_profile(6, 10, 8, 25),
         gas_stations=GasStationInput(supply_pressure_pa_g=60e5, delivery_min_pa_g=30e5),
     )
-    try:
-        crs, alts, exs, res, img = _route(r_nps, r_p, int(r_k), r_base.model_dump_json())
-    except ValueError as e:
-        st.error(str(e))
+    r_key = (r_nps, r_p, int(r_k), r_base.model_dump_json())
+    if st.button("Find corridors", key="r_go", type="primary"):
+        st.session_state.r_key = r_key
+    r_ok = False
+    if st.session_state.get("r_key") != r_key:
+        _press_to_run("Find corridors", "r_key")
     else:
+        try:
+            crs, alts, exs, res, img = _route(*r_key)
+            r_ok = True
+        except ValueError as e:
+            st.error(str(e))
+    if r_ok:
         st.image(img, caption="Cost surface (darker = dearer), corridors C1..Cn in colour")
         st.dataframe(
             [

@@ -79,16 +79,31 @@ def test_hydraulics_tab_liquid() -> None:
     assert float(delivery.value) >= 2.0
 
 
+def test_heavy_tabs_wait_for_their_buttons() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert not any(m.label == "Lowest lifecycle cost" for m in at.metric)
+    assert not at.get("deck_gl_json_chart")
+    infos = [i.value for i in at.info]
+    assert any("Evaluate diameters" in v for v in infos)
+    assert any("Find corridors" in v for v in infos)
+    at.button(key="e_go").click().run()
+    at.number_input(key="e_q1").set_value(11.0).run()  # inputs changed since the run
+    assert any("Inputs changed" in i.value for i in at.info)
+
+
 def test_economics_tab_renders_with_placeholder_warning() -> None:
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
     assert not at.exception
     assert any("PLACEHOLDER unit rates" in w.value for w in at.warning)
+    at.button(key="e_go").click().run()
     best = next(m for m in at.metric if m.label == "Lowest lifecycle cost")
     assert best.value.endswith('"')
 
 
 def test_route_tab_finds_corridors() -> None:
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+    at.button(key="r_go").click().run()
     assert not at.exception
     assert not [e.value for e in at.error]
     assert len(at.dataframe) >= 1
@@ -106,6 +121,8 @@ def test_bot_tab_explains_missing_credentials(monkeypatch: pytest.MonkeyPatch) -
 
 def test_report_downloads_and_route_map() -> None:
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+    at.button(key="e_go").click().run()
+    at.button(key="r_go").click().run()
     assert not at.exception
     labels = [d.proto.label for d in at.get("download_button")]
     assert "Download report (Word)" in labels and "Download workbook (Excel)" in labels
@@ -123,6 +140,7 @@ def test_economics_risk_button_and_rate_sets(
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
     assert at.selectbox(key="e_rateset").options == ["placeholder", "plus2"]
     at.multiselect(key="e_sizes").set_value(["20", "24", "28"]).run()
+    at.button(key="e_go").click().run()
     at.select_slider(key="e_samples").set_value(2000).run()
     at.button(key="e_risk").click().run()
     assert not at.exception
@@ -163,6 +181,7 @@ def test_mechanical_fe_fault_crossing() -> None:
 def test_route_tab_geohazard_checks() -> None:
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
     at.number_input(key="r_k").set_value(2).run()
+    at.button(key="r_go").click().run()
     at.button(key="r_geo").click().run()
     assert not at.exception
     frames = [d.value for d in at.dataframe]
