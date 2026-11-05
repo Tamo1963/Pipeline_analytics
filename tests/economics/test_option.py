@@ -165,7 +165,7 @@ def test_liquid_option() -> None:
 
 
 def test_electric_compressors_use_electricity() -> None:
-    r = evaluate_option(GAS.model_copy(update={"nps": 24, "compressor_driver": "electric"}))
+    r = evaluate_option(GAS.model_copy(update={"nps": "24", "compressor_driver": "electric"}))
     h = r.hydraulics[0]
     assert h.fuel_gas_scm == 0 and h.electricity_kwh > 0
 
@@ -212,7 +212,7 @@ def test_offtake_and_declining_supply_in_option() -> None:
     from pipeline_analytics.hydraulics import Offtake
 
     flat = Profile.flat(150e3, points=31)
-    base = GAS.model_copy(update={"profile": flat, "nps": 24, "throughput": (6.0,) * 20})
+    base = GAS.model_copy(update={"profile": flat, "nps": "24", "throughput": (6.0,) * 20})
     falling = tuple(70e5 - 2e5 * t for t in range(20))  # 70 -> 32 barg
     r = evaluate_option(
         OptionInput.model_validate(
