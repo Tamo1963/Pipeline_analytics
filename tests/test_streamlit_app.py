@@ -162,3 +162,12 @@ def test_route_tab_geohazard_checks() -> None:
     assert not at.exception
     frames = [d.value for d in at.dataframe]
     assert any("Strain UR" in getattr(f, "columns", []) for f in frames)
+
+
+def test_mechanical_liquefaction_panel() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=180).run()
+    at.button(key="lq_run").click().run()
+    assert not at.exception
+    lpi = next(m for m in at.metric if m.label == "LPI")
+    assert float(lpi.value) > 0
+    assert any(m.label == "HDD setback needed" for m in at.metric)

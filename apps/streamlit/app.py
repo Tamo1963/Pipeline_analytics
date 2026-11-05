@@ -212,6 +212,38 @@ def _fe_sweep(pipe_json: str, springs_json: str, slip: float, dip: float, rake: 
     )
 
 
+@st.cache_data(show_spinner="Liquefaction, lateral spread and pipe checks...")
+def _lq_run(layers_json: str, wt: float, m: float, pga: float, r: float, h: float,
+            skew: float, pipe_json: str, springs_json: str, grade: str,
+            p_barg: float) -> tuple[Any, Any, Any, Any]:  # fmt: skip
+    from pipeline_analytics.geotech import (
+        Earthquake,
+        SptLayer,
+        SptProfile,
+        lateral_spread,
+        triggering,
+    )
+    from pipeline_analytics.geotech.pipe import bank_spread_check, flotation_check
+    from pipeline_analytics.mechanical import PipeSection
+    from pipeline_analytics.mechanical.soil import SoilSprings
+
+    rows = pd.read_json(io.StringIO(layers_json)).to_dict("records")
+    clean = [
+        {str(k): (None if isinstance(v, float) and np.isnan(v) else v) for k, v in rw.items()}
+        for rw in rows
+    ]
+    prof = SptProfile(layers=tuple(SptLayer(**c) for c in clean), water_table_m=wt)
+    t = triggering(prof, Earthquake(magnitude=m, pga_g=pga, distance_km=r))
+    ls = lateral_spread(t, free_face_height_m=h)
+    pipe = PipeSection.model_validate_json(pipe_json)
+    chk = None
+    if ls.max_displacement_m > 0:
+        chk = bank_spread_check(pipe, SoilSprings.model_validate_json(springs_json), ls,
+                                grade=grade, pressure_pa=p_barg * 1e5, skew_deg=skew)  # fmt: skip
+    flo = flotation_check(pipe) if t.liquefied_thickness_m > 0 else None
+    return t, ls, chk, flo
+
+
 with mech_tab:
     st.caption(
         "Buried-pipe checks per ALA 2001 Guidelines for the Design of Buried Steel Pipe, "
@@ -436,6 +468,86 @@ with mech_tab:
                              hide_index=True)  # fmt: skip
                 st.success(f"Lowest strain utilisation at {sw.best_angle_deg:g}° to the fault "
                            "strike (pipe in tension).")  # fmt: skip
+
+        # ---------------------------------------- liquefaction & lateral spreading
+        with st.expander("Earthquake liquefaction and lateral spreading (river banks)"):
+            st.caption(
+                "SPT triggering per Idriss & Boulanger (2008); lateral spread per Youd et al. "
+                "(2002) behind a river bank; HDD exit setback for the pipe (FE model); "
+                "flotation in liquefied soil. The default profile is a GENERIC young deltaic "
+                "bank: replace it with borehole data."
+            )
+            from pipeline_analytics.geotech import deltaic_profile
+
+            lq_default = pd.DataFrame([lay.model_dump() for lay in deltaic_profile().layers])
+            lq_layers = st.data_editor(
+                lq_default.drop(columns=["description"]), num_rows="dynamic", key="lq_layers"
+            )
+            q1, q2, q3 = st.columns(3)
+            lq_wt = q1.number_input("Water table (m)", value=1.0, min_value=0.0, key="lq_wt")
+            lq_m = q1.number_input("Magnitude M", value=7.5, min_value=5.0, max_value=9.0,
+                                   key="lq_m")  # fmt: skip
+            lq_pga = q2.number_input("PGA at surface (g)", value=0.18, min_value=0.01,
+                                     key="lq_pga")  # fmt: skip
+            lq_r = q2.number_input("Source distance (km)", value=30.0, min_value=0.0,
+                                   key="lq_r")  # fmt: skip
+            lq_h = q3.number_input("Bank height (m)", value=5.0, min_value=0.5, key="lq_h")
+            lq_skew = q3.number_input("Pipe skew to bank normal (°)", value=0.0, min_value=0.0,
+                                      max_value=75.0, key="lq_skew")  # fmt: skip
+            if st.button("Run liquefaction check", key="lq_run"):
+                st.session_state.lq_key = (
+                    lq_layers.to_json(), lq_wt, lq_m, lq_pga, lq_r, lq_h, lq_skew,
+                    m_pipe.model_dump_json(), result.springs.model_dump_json(), m_grade, m_p,
+                )  # fmt: skip
+            if st.session_state.get("lq_key"):
+                try:
+                    t, ls, chk, flo = _lq_run(*st.session_state.lq_key)
+                except ValueError as e:
+                    st.error(str(e))
+                else:
+                    l1, l2, l3, l4 = st.columns(4)
+                    l1.metric("LPI", f"{t.lpi:.1f}", "low < 5 < high < 15 < very high",
+                              delta_color="off")  # fmt: skip
+                    l2.metric("Liquefied thickness", f"{t.liquefied_thickness_m:.1f} m")
+                    l3.metric("Spread at bank", f"{ls.max_displacement_m:.2f} m",
+                              f"extent {ls.extent_m:.0f} m" if ls.extent_m != float("inf")
+                              else "", delta_color="off")  # fmt: skip
+                    if chk is None:
+                        need = "-"
+                    elif chk.required_setback_m is None:
+                        need = "> tested"
+                    else:
+                        need = f"{chk.required_setback_m:.0f} m"
+                    l4.metric("HDD setback needed", need)
+                    st.dataframe([{
+                        "Depth m": round(r.depth_m, 1), "(N1)60cs": round(r.n1_60cs, 1),
+                        "CSR": round(r.csr, 3),
+                        "CRR": None if r.crr == float("inf") else round(r.crr, 3),
+                        "FS": None if r.factor_of_safety == float("inf")
+                        else round(r.factor_of_safety, 2),
+                        "Liquefies": "yes" if r.liquefies else "no",
+                    } for r in t.layers], hide_index=True)  # fmt: skip
+                    for w in ls.warnings:
+                        st.warning(w)
+                    if len(ls.profile) > 1:
+                        st.line_chart(pd.DataFrame({
+                            "distance from bank toe (m)": [p.distance_m for p in ls.profile],
+                            "lateral spread (m)": [p.displacement_m for p in ls.profile],
+                        }).set_index("distance from bank toe (m)"))  # fmt: skip
+                    if chk is not None:
+                        st.dataframe([{
+                            "HDD exit setback m": c.setback_m,
+                            "Ground movement m": round(c.displacement_m, 2),
+                            "Strain UR": round(c.utilisation, 2),
+                            "Result": "PASS" if c.passed else "FAIL",
+                        } for c in chk.cases], hide_index=True)  # fmt: skip
+                    if flo is not None:
+                        (st.warning if flo.floats else st.success)(
+                            f"Empty pipe in liquefied soil: net uplift "
+                            f"{flo.net_uplift_n_per_m / 1e3:.1f} kN/m; concrete coating to hold "
+                            f"it down {flo.required_concrete_mm:.0f} mm (or anchors / burial "
+                            "below the liquefiable layer)."
+                        )
 
 # ------------------------------------------------- class location & hydraulics
 with hyd_tab:

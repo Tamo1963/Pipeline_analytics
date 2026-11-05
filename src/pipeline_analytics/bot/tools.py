@@ -201,6 +201,39 @@ class GroundMovementInput(_In):
     )
 
 
+class SptLayerIn(_In):
+    top_m: float = Field(ge=0)
+    bottom_m: float = Field(gt=0)
+    n60: float = Field(ge=0, description="SPT N corrected to 60 % hammer energy")
+    fines_pct: float = Field(default=5.0, ge=0, le=100)
+    d50_mm: float | None = Field(default=None, gt=0)
+    unit_weight_kn_m3: float = Field(default=18.0, gt=0)
+    plasticity_index: float | None = Field(default=None, ge=0)
+
+
+class LiquefactionInput(_In):
+    layers: list[SptLayerIn] | None = Field(
+        default=None,
+        description="SPT profile from the ground surface; omit to use a generic young "
+        "deltaic river-bank profile (an assumption to state)",
+    )
+    water_table_m: float = Field(default=1.0, ge=0)
+    magnitude: float = Field(ge=5, le=9.5)
+    pga_g: float = Field(gt=0, le=2, description="peak ground acceleration at the surface")
+    distance_km: float = Field(ge=0, description="to the nearest edge of the seismic source")
+    bank_height_m: float | None = Field(default=5.0, gt=0, description="free face (river bank)")
+    ground_slope_pct: float | None = Field(default=None, gt=0, description="instead of a bank")
+    nps: str = "24"
+    wall_mm: float = Field(default=9.5, gt=0)
+    grade: str = "X65"
+    design_pressure_barg: float = Field(default=0.0, ge=0)
+    cover_m: float = Field(default=1.2, gt=0)
+    backfill: Literal["soft_clay", "stiff_clay", "loose_sand", "dense_sand"] = "soft_clay"
+    backfill_strength_kpa: float = Field(default=15.0, ge=0, description="undrained (clay)")
+    skew_deg: float = Field(default=0.0, ge=0, lt=80, description="pipe to the bank normal")
+    hdd_transition_m: float = Field(default=0.0, ge=0)
+
+
 class EmptyInput(_In):
     pass
 
@@ -337,6 +370,85 @@ def ground_movement_check(study: Study, a: GroundMovementInput) -> dict[str, Any
             for c in sw.cases
         ]  # fmt: skip
         out["best_crossing_angle_deg"] = sw.best_angle_deg
+    return out
+
+
+def liquefaction_check(study: Study, a: LiquefactionInput) -> dict[str, Any]:
+    from pipeline_analytics.geotech import (
+        Earthquake,
+        SptLayer,
+        SptProfile,
+        deltaic_profile,
+        lateral_spread,
+        triggering,
+    )
+    from pipeline_analytics.geotech.pipe import bank_spread_check, flotation_check
+    from pipeline_analytics.mechanical import pipe_from_library
+    from pipeline_analytics.mechanical.soil import Coating, Soil, SoilType, soil_springs
+
+    assumed = a.layers is None
+    profile = (
+        deltaic_profile()
+        if a.layers is None
+        else SptProfile(
+            layers=tuple(SptLayer(**x.model_dump()) for x in a.layers),
+            water_table_m=a.water_table_m,
+        )
+    )
+    eq = Earthquake(magnitude=a.magnitude, pga_g=a.pga_g, distance_km=a.distance_km)
+    t = triggering(profile, eq)
+    out: dict[str, Any] = {
+        "profile": "ASSUMED generic deltaic river bank" if assumed else "as given",
+        "layers": [
+            {"depth_m": round(r.depth_m, 1), "n1_60cs": round(r.n1_60cs, 1),
+             "csr": round(r.csr, 3), "crr": None if r.crr == float("inf") else round(r.crr, 3),
+             "factor_of_safety": None if r.factor_of_safety == float("inf")
+             else round(r.factor_of_safety, 2),
+             "liquefies": r.liquefies}
+            for r in t.layers
+        ],
+        "liquefaction_potential_index": round(t.lpi, 1),
+        "liquefied_thickness_m": round(t.liquefied_thickness_m, 1),
+        "method": "Idriss & Boulanger (2008) SPT triggering; Youd et al. (2002) lateral spread; "
+        "pipe-soil FE (ALA springs) for the pipe; flotation per ALA 2001",
+    }  # fmt: skip
+    ls = lateral_spread(t, free_face_height_m=None if a.ground_slope_pct else a.bank_height_m,
+                        slope_pct=a.ground_slope_pct)  # fmt: skip
+    out["lateral_spread"] = {
+        "mode": ls.mode,
+        "displacement_at_bank_m": round(ls.max_displacement_m, 2),
+        "extent_m": None if ls.extent_m == float("inf") else round(ls.extent_m),
+        "displacement_vs_distance_m": [
+            [round(p.distance_m), round(p.displacement_m, 2)] for p in ls.profile[::6]
+        ],
+        "t15_m": round(ls.t15_m, 1), "f15_pct": round(ls.f15_pct), "d50_15_mm": ls.d50_15_mm,
+        "warnings": list(ls.warnings),
+    }  # fmt: skip
+    pipe = pipe_from_library(a.nps, a.wall_mm, a.grade)
+    soil_type = SoilType(a.backfill)
+    soil = (Soil(soil_type=soil_type, unit_weight_n_m3=17.5e3,
+                 cohesion_pa=a.backfill_strength_kpa * 1e3, below_water_table=True)
+            if not soil_type.granular else
+            Soil(soil_type=soil_type, unit_weight_n_m3=19e3, friction_angle_deg=32,
+                 below_water_table=True))  # fmt: skip
+    springs = soil_springs(pipe.od_m, a.cover_m + pipe.od_m / 2, soil, Coating.POLYETHYLENE)
+    if ls.mode == "free_face" and ls.max_displacement_m > 0:
+        c = bank_spread_check(pipe, springs, ls, grade=a.grade,
+                              pressure_pa=a.design_pressure_barg * 1e5, skew_deg=a.skew_deg,
+                              transition_m=a.hdd_transition_m)  # fmt: skip
+        out["hdd_setback"] = {
+            "required_setback_from_bank_toe_m": c.required_setback_m,
+            "cases": [{"setback_m": x.setback_m, "displacement_m": round(x.displacement_m, 2),
+                       "strain_utilisation": None if x.utilisation == float("inf")
+                       else round(x.utilisation, 2), "passes": x.passed} for x in c.cases],
+        }  # fmt: skip
+    if t.liquefied_thickness_m > 0:
+        f = flotation_check(pipe)
+        out["flotation_in_liquefied_soil"] = {
+            "floats_when_empty": f.floats,
+            "net_uplift_kn_per_m": round(f.net_uplift_n_per_m / 1e3, 2),
+            "concrete_coating_to_hold_down_mm": round(f.required_concrete_mm),
+        }
     return out
 
 
@@ -757,6 +869,19 @@ TOOLS: tuple[Tool, ...] = (
         ),
         GroundMovementInput,
         ground_movement_check,
+    ),
+    Tool(
+        "liquefaction_check",
+        (
+            "Earthquake liquefaction and lateral spreading at a river bank or slope: SPT-based "
+            "triggering (Idriss & Boulanger 2008) layer by layer, liquefaction potential "
+            "index, lateral spread displacement and extent (Youd et al. 2002), the HDD exit "
+            "setback from the bank needed for the pipe to stay within ALA strain limits "
+            "(pipe-soil FE), and pipe flotation in liquefied soil. Without SPT data it uses "
+            "a generic deltaic profile, which must be stated as an assumption."
+        ),
+        LiquefactionInput,
+        liquefaction_check,
     ),
     Tool(
         "reserve_life",

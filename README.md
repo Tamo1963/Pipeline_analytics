@@ -14,6 +14,7 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 2a | Mechanical design per ALA buried-pipe guidelines: see [`docs/mechanical-ala.md`](docs/mechanical-ala.md) | ✅ core checks done |
 | 2b | Class location and liquid/gas hydraulics with station siting: see [`docs/hydraulics-class-location.md`](docs/hydraulics-class-location.md) | ✅ done |
 | 2c | Pipe–soil FE model: fault crossings, transverse PGD, settlement, crossing-angle sweep; benchmarked against Karamitros et al. (2007): see [`docs/mechanical-fe.md`](docs/mechanical-fe.md) | ✅ done |
+| 2d | Earthquake liquefaction and lateral spreading: triggering, bank spread, HDD setback, flotation: see [`docs/liquefaction.md`](docs/liquefaction.md) | ✅ done |
 | 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
 | 4 | Route / alignment engine, with mapped faults and landslides strain-checked, mitigated or realigned: see [`docs/routing.md`](docs/routing.md) | ✅ done |
 | 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
@@ -59,6 +60,7 @@ src/pipeline_analytics/
   bot/          feasibility bot: Claude agent, tools, guardrail, benchmark (`pipeline-bot`)
   reports/      study report model; Word report and Excel workbook writers
   projects/     multi-user project store: owners, sharing, append-only versions
+  geotech/      liquefaction triggering (Idriss & Boulanger), lateral spread (Youd 2002), pipe checks
   api/          FastAPI service layer (planned)
 apps/streamlit/ UI
 studies/       worked studies (Bhola - Khulna test case)

@@ -406,6 +406,13 @@ A domain expert assistant ("pipeline feasibility engineer") that:
   * a failing fault crossing is realigned at its best angle, and the optimiser picks between mitigation and realignment on lifecycle cost;
   * leg-based routes and the bot take the same hazards.
 
+* Earthquake liquefaction and lateral spreading (`docs/liquefaction.md`):
+  * SPT triggering (Idriss & Boulanger 2008) and LPI;
+  * lateral spread behind river banks (Youd et al. 2002);
+  * an FE check of the HDD exit setback, and flotation in liquefied soil;
+  * the bot tool `liquefaction_check` and a Mechanical-tab panel;
+  * a Bhola river-bank what-if.
+
 **Next steps:**
 * run the bot benchmark with credentials;
 * load project rates (`pipeline-rates new`) in place of the placeholder set;

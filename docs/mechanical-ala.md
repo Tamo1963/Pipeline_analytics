@@ -28,6 +28,7 @@ Code: `src/pipeline_analytics/mechanical/`. Every check returns a `CheckResult` 
 | 15 | PGD, fault crossing | Pipe–soil FE model with the springs above; crossing angle optimisation | `fe.py`, `pgd.py` | ✅ Phase 2c (see `docs/mechanical-fe.md`) |
 | 16 | PGD, transverse | Lateral spread or landslide perpendicular to the pipe | `pgd.py` | ✅ Phase 2c |
 | 17 | PGD, settlement / subsidence | Vertical ground movement | `pgd.py` | ✅ Phase 2c |
+| 17a | Liquefaction, lateral spread, flotation in liquefied soil | Idriss & Boulanger (2008) triggering; Youd et al. (2002) spread; FE HDD setback | `geotech/` | ✅ (see `docs/liquefaction.md`) |
 | 18 | Road / rail crossings | API RP 1102 cased/uncased crossing stresses | — | Planned (crossing module) |
 | 19 | Bends and above-ground transitions | Partially restrained thermal growth, bend stresses | — | Planned (Phase 2b) |
 

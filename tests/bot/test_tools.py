@@ -154,6 +154,21 @@ def test_route_geohazards_checked_in_search() -> None:
     assert "geohazards" in e
 
 
+def test_liquefaction_check() -> None:
+    out = call(Study(), "liquefaction_check", {
+        "magnitude": 7.5, "pga_g": 0.18, "distance_km": 30, "nps": "24", "wall_mm": 6.5,
+        "design_pressure_barg": 69,
+    })  # fmt: skip
+    assert out["profile"].startswith("ASSUMED")
+    assert out["liquefaction_potential_index"] > 5
+    assert out["lateral_spread"]["displacement_at_bank_m"] > 0.5
+    assert out["hdd_setback"]["required_setback_from_bank_toe_m"] == 50
+    assert out["flotation_in_liquefied_soil"]["floats_when_empty"]
+    calm = call(Study(), "liquefaction_check", {"magnitude": 8, "pga_g": 0.08,
+                                                "distance_km": 200})  # fmt: skip
+    assert calm["liquefied_thickness_m"] == 0 and "hdd_setback" not in calm
+
+
 def test_generate_report_needs_a_search() -> None:
     text, err = run_tool(Study(), "generate_report", {"title": "Test"})
     assert err and "run_design_search" in text
