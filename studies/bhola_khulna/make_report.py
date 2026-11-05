@@ -36,6 +36,25 @@ def size_table(by_size: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def risk_bullet(risk: dict[str, Any] | None) -> str:
+    if not risk:
+        return ""
+    ranked = sorted(risk["designs"], key=lambda r: -r["prob_cheapest"])
+    top, second = ranked[0], ranked[1]
+    n30 = next((r for r in risk["designs"] if r["design"].startswith('30"')), None)
+    tail = (
+        f' 30" is never the cheapest (P50 US$ {n30["p50_usd_m"]}M).'
+        if n30 and n30["prob_cheapest"] == 0
+        else ""
+    )
+    return (
+        f"* **Under cost and throughput uncertainty** (section 7), {top['design'].split(' @')[0]} "
+        f"is the cheapest in {top['prob_cheapest']:.0%} of Monte Carlo samples (P50 US$ "
+        f"{top['p50_usd_m']}M, P90 {top['p90_usd_m']}M) and {second['design'].split(' @')[0]} "
+        f"in {second['prob_cheapest']:.0%}.{tail}\n"
+    )
+
+
 def risk_md(risk: dict[str, Any] | None) -> str:
     if not risk:
         return ""
@@ -92,7 +111,7 @@ def main() -> None:
   {" or ".join(w + chr(34) for w in wins)}, never 30". The gap to 30" narrows most when
   throughput rises to 260 MMSCFD (see section 6). A larger pipe is justified only by flow beyond 180 MMSCFD, e.g.
   national-grid transit or proven upside reserves.
-* **Compression:** with field pressure falling from 62 to 35 barg, the optimum needs compression
+{risk_bullet(d.get("risk"))}* **Compression:** with field pressure falling from 62 to 35 barg, the optimum needs compression
   from year {_fmt(best_a["first_compression_year"])} (peak {best_a["peak_compression_mw"]} MW).
   The note's "en-route compressors" are needed only as the fields deplete; they can be phased
   in rather than built on day one.

@@ -136,6 +136,18 @@ risk_section = (
 """
 )
 
+if rtop is None:
+    risk_li = ""
+else:
+    r2 = sorted(risk["designs"], key=lambda r: -r["prob_cheapest"])[1]
+    r30 = next((r for r in risk["designs"] if r["design"].startswith('30"')), None)
+    risk_li = (
+        f"    <li>With unit rates and flow both uncertain, <strong>{e(rtop['design'].split(' @')[0])} is the cheapest in "
+        f"{rtop['prob_cheapest']:.0%} of samples</strong> and {e(r2['design'].split(' @')[0])} in {r2['prob_cheapest']:.0%}"
+        + ('; 30" is never the cheapest' if r30 and r30["prob_cheapest"] == 0 else "")
+        + ".</li>"
+    )
+
 wins = sorted({s["best_nps"] for s in sens}, key=float)
 page = f"""<title>Bhola–Khulna Pipeline Sizing</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -239,6 +251,7 @@ footer .wrap {{ padding-block:24px; font-size:12px; line-height:18px; color:var(
   <ul class="points">
     <li>For 180 MMSCFD on the note's 173 km route, the optimum is <strong>{best["nps"]}" {best["grade"]} at {best["maop_psig"]} psig</strong>, with a lifecycle cost of US$ {best["lcc_usd_m"]:.1f}M (present value). The 30" pipe in the note costs US$ {a30["lcc_usd_m"]:.1f}M.</li>
     <li>The result holds across all {len(sens)} sensitivity cases: the best size is {" or ".join(w + '"' for w in wins)}, never 30". The gap narrows most if throughput rises to 260 MMSCFD.</li>
+{risk_li}
     <li>Compressors are needed only as the Bhola fields deplete. On {best["nps"]}" they are first needed in year {best["first_compression_year"]} (peak {best["peak_compression_mw"]} MW), so they can be phased in rather than built on day one.</li>
     <li>Reserves limit the plateau. Of {res["remaining_recoverable_tcf"]} Tcf remaining recoverable gas, 180 MMSCFD lasts <strong>{res["years_at_pipeline_rate_only"]} years</strong>, but only <strong>{res["years_if_local_use_continues"]} years</strong> if the island's existing ~80 MMSCFD power and CNG use continues.</li>
   </ul>

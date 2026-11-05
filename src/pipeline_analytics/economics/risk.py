@@ -152,7 +152,7 @@ def _variant(inp: OptionInput, factor: float, rate_factors: dict[str, float]) ->
 
 
 def label_of(inp: OptionInput) -> str:
-    return f'{inp.nps}" {inp.grade} @ {inp.design_pressure_pa_g / 1e5:g} barg'
+    return f'{inp.nps}" {inp.grade} @ {inp.design_pressure_pa_g / 1e5:.1f} barg'
 
 
 def build_linear_models(
