@@ -162,3 +162,12 @@ def test_hdd_length_not_double_counted() -> None:
     assert w_amt["HDD crossings"] == pytest.approx(od_in * 5_000 * 2000)
     with pytest.raises(ValueError, match="HDD"):
         capex_estimate(Service.GAS, [SEG], RouteQuantities(hdd_m=200_000), zero, R)
+
+
+def test_with_indirects_matches_capex_estimate() -> None:
+    from pipeline_analytics.cost.boq import with_indirects
+
+    est = capex_estimate(
+        Service.GAS, [SEG], RouteQuantities(), StationQty(required_kw=0, count=0), R
+    )
+    assert with_indirects(est.direct_excl_land, est.land, R) == pytest.approx(est.total)

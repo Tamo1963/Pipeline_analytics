@@ -228,6 +228,37 @@ def write_xlsx(report: StudyReport, path: str | Path | IO[bytes]) -> Path | IO[b
     )
     _widths(wsn, [46, 24, 12, 22, 11])
 
+    # ---- Risk
+    if report.risk:
+        wr = wb.create_sheet("Risk")
+        rows = [
+            [
+                r.design,
+                *(v if v != float("inf") else "infeasible" for v in (r.p10, r.p50, r.p90)),
+                r.deterministic,
+                r.prob_cheapest,
+                r.prob_infeasible,
+            ]
+            for r in report.risk
+        ]
+        nxt = _table(
+            wr,
+            1,
+            [
+                "Design",
+                f"P10 {m}",
+                f"P50 {m}",
+                f"P90 {m}",
+                f"Deterministic {m}",
+                "P(cheapest)",
+                "P(infeasible)",
+            ],
+            rows,
+            {2: MONEY, 3: MONEY, 4: MONEY, 5: MONEY, 6: "0%", 7: "0%"},
+        )
+        wr.cell(row=nxt, column=1, value=report.risk_note).font = NOTE
+        _widths(wr, [28, 12, 12, 12, 16, 12, 12])
+
     # ---- Inputs and Method
     wi = wb.create_sheet("Inputs")
     nxt = _table(wi, 1, ["Input", "Value"], [list(kv) for kv in report.inputs])

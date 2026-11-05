@@ -143,3 +143,65 @@ CRORE = 1e7
 def crore(amount_inr: float) -> float:
     """INR to crore (1 crore = 10 million)."""
     return amount_inr / CRORE
+
+
+# ---------------------------------------------------------------- rate groups
+RATE_GROUPS: dict[str, str] = {
+    "line_pipe": "Line pipe price per tonne",
+    "construction": "Laying, crossings (HDD, open cut, roads, rail) and concrete coating",
+    "stations": "Compressor / pump stations, terminals, valve and scraper stations",
+    "other_capex": "External coating, CP, SCADA / telecom, right of use and station land",
+    "energy": "Electricity and fuel-gas prices",
+    "o_and_m": "Line O&M, manpower and in-line inspection rates",
+}
+"""Groups used by sensitivity and risk analysis.
+
+Percentage-based items (station O&M % of station CAPEX, insurance % of CAPEX,
+indirect cost %) are deliberately in no group: they already scale with the
+CAPEX groups, and scaling them too would create cross-terms. With these groups
+a fixed design's lifecycle cost is exactly linear in each group's factor.
+"""
+
+
+def scale_rate_groups(rates: UnitRates, factors: dict[str, float]) -> UnitRates:
+    """Copy of ``rates`` with each named group multiplied by its factor (validated rebuild)."""
+    unknown = set(factors) - set(RATE_GROUPS)
+    if unknown:
+        raise KeyError(f"unknown rate groups: {sorted(unknown)}")
+    d = rates.model_dump()
+    k = factors.get("line_pipe", 1.0)
+    d["line_pipe"]["base_rate_per_tonne"] *= k
+    k = factors.get("construction", 1.0)
+    d["laying_per_inch_km"] *= k
+    d["concrete_coating_per_m3"] *= k
+    cr = d["crossings"]
+    cr["hdd_per_inch_m"] *= k
+    cr["open_cut_river_per_inch_m"] *= k
+    cr["per_crossing"] = {c: v * k for c, v in cr["per_crossing"].items()}
+    k = factors.get("stations", 1.0)
+    for f in ("compressor_fixed", "compressor_per_kw", "pump_fixed", "pump_per_kw",
+              "terminal_each", "sectionalising_valve_each", "scraper_station_each"):  # fmt: skip
+        d["stations"][f] *= k
+    k = factors.get("other_capex", 1.0)
+    d["coating_per_m2"] = {c: v * k for c, v in d["coating_per_m2"].items()}
+    d["per_km"] = {c: v * k for c, v in d["per_km"].items()}
+    d["land"]["rou_compensation_per_ha"] = {
+        c: v * k for c, v in d["land"]["rou_compensation_per_ha"].items()
+    }
+    d["land"]["permanent_land_per_ha"] *= k
+    k = factors.get("energy", 1.0)
+    d["opex"]["electricity_per_kwh"] *= k
+    d["opex"]["fuel_gas_per_scm"] *= k
+    k = factors.get("o_and_m", 1.0)
+    for f in ("line_om_per_km_year", "manpower_per_station_year", "manpower_base_year",
+              "ili_per_km_run"):  # fmt: skip
+        d["opex"][f] *= k
+    return UnitRates.model_validate(d)
+
+
+CAPITAL_GROUPS = ("line_pipe", "construction", "stations", "other_capex")
+
+
+def scale_capital(rates: UnitRates, k: float) -> UnitRates:
+    """All capital rate groups x ``k`` (OPEX rates unchanged)."""
+    return scale_rate_groups(rates, dict.fromkeys(CAPITAL_GROUPS, k))

@@ -88,6 +88,18 @@ class SensitivityRow(_M):
     compare_premium_pct: float | None = None
 
 
+class RiskRow(_M):
+    """One design's Monte Carlo result (money in report units; inf = infeasible tail)."""
+
+    design: str
+    p10: float
+    p50: float
+    p90: float
+    deterministic: float
+    prob_cheapest: float
+    prob_infeasible: float
+
+
 class StudyReport(_M):
     title: str
     subtitle: str = ""
@@ -109,6 +121,8 @@ class StudyReport(_M):
     capex_accuracy: str = ""
     years: list[YearRow] = Field(default_factory=list)
     sensitivity: list[SensitivityRow] = Field(default_factory=list)
+    risk: list[RiskRow] = Field(default_factory=list)
+    risk_note: str = ""
     scenarios_evaluated: int = 0
     next_steps: list[str] = Field(default_factory=list)
 
@@ -197,6 +211,8 @@ def report_from_search(
     assumptions: Sequence[str] = (),
     disclosures: Sequence[str] = (),
     sensitivity: Sequence[SensitivityRow] = (),
+    risk: Sequence[RiskRow] = (),
+    risk_note: str = "",
     next_steps: Sequence[str] = (),
     scenarios_evaluated: int | None = None,
 ) -> StudyReport:
@@ -268,6 +284,12 @@ def report_from_search(
             f'The {compare.nps}" option costs {compare.lcc:,.1f} {money.label}, '
             f"{(compare.lcc / best.lcc - 1) * 100:.1f} % more than the optimum."
         )
+    if risk:
+        top = max(risk, key=lambda r: r.prob_cheapest)
+        summary.append(
+            f"Under cost and throughput uncertainty, {top.design} is cheapest in "
+            f"{top.prob_cheapest:.0%} of Monte Carlo samples."
+        )
     if sensitivity:
         bests = sorted({s.best for s in sensitivity})
         cases = "case" if len(sensitivity) == 1 else "cases"
@@ -296,6 +318,8 @@ def report_from_search(
         capex_accuracy=res.capex.accuracy_class,
         years=years,
         sensitivity=list(sensitivity),
+        risk=list(risk),
+        risk_note=risk_note,
         scenarios_evaluated=scenarios_evaluated or len(search.evaluated),
         next_steps=list(next_steps)
         or [
@@ -310,3 +334,29 @@ def report_from_search(
 
 def as_dict(report: StudyReport) -> dict[str, Any]:
     return report.model_dump(mode="json")
+
+
+def risk_rows(result: Any, money: Money) -> list[RiskRow]:
+    """Convert an ``economics.risk.RiskResult`` to report rows."""
+    return [
+        RiskRow(
+            design=d.label,
+            p10=money.m(d.lcc_p10),
+            p50=money.m(d.lcc_p50),
+            p90=money.m(d.lcc_p90),
+            deterministic=money.m(d.deterministic_lcc),
+            prob_cheapest=d.prob_cheapest,
+            prob_infeasible=d.prob_infeasible,
+        )
+        for d in result.designs
+    ]
+
+
+def risk_note_for(result: Any) -> str:
+    sc = ", ".join(f"{s.name} x{s.factor:g} ({s.probability:.0%})" for s in result.inputs.scenarios)
+    gr = ", ".join(f"{g} {t.low:g}-{t.mode:g}-{t.high:g}" for g, t in result.inputs.groups.items())
+    return (
+        f"{result.inputs.samples:,} Monte Carlo samples. Throughput scenarios: {sc}. Rate "
+        f"factors (triangular low-mode-high): {gr}. Groups sampled independently; "
+        "infeasible samples (e.g. velocity limit exceeded) count as the worst outcome."
+    )

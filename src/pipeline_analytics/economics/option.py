@@ -36,6 +36,7 @@ from pipeline_analytics.cost.boq import (
     StationQty,
     capex_estimate,
     station_items,
+    with_indirects,
 )
 from pipeline_analytics.cost.opex import OpexBreakdown, OpexYear, annual_opex
 from pipeline_analytics.cost.rates import UnitRates, _Model, placeholder_rates
@@ -385,11 +386,13 @@ def evaluate_option(inp: OptionInput) -> OptionResult:
                 if inp.service is Service.GAS
                 else (sr.pump_fixed, sr.pump_per_kw)
             )
-            direct = dn * (fixed + rates.land.station_land_ha * rates.land.permanent_land_per_ha)
-            direct += dkw * sr.installed_power_factor * per_kw
+            plant = dn * fixed + dkw * sr.installed_power_factor * per_kw
+            land_cost = dn * rates.land.station_land_ha * rates.land.permanent_land_per_ha
             cal = c.operating_year_index(y.operating_year) - 1  # year before it is needed
-            sustaining[cal] = sustaining.get(cal, 0.0) + direct * capex.total_factor
-            station_direct += direct
+            # indirects applied as in the CAPEX estimate (not via a total/direct ratio,
+            # which mixed land into the overhead factor and was not linear in the rates)
+            sustaining[cal] = sustaining.get(cal, 0.0) + with_indirects(plant, land_cost, rates)
+            station_direct += plant + land_cost
         cum_n, cum_kw = max(cum_n, y.stations), max(cum_kw, y.peak_power_kw)
         installed.append((cum_n, station_direct))
 

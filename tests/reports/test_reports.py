@@ -74,8 +74,15 @@ def test_docx(report, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     path = write_docx(report, tmp_path / "r.docx")
     doc = Document(str(path))
     text = "\n".join(p.text for p in doc.paragraphs)
-    for heading in ("1  Summary", "2  Scope and method", "4  Results by pipe size",
-                    "5  Recommended design", "6  Sensitivity", "7  Limitations"):  # fmt: skip
+    headings = (
+        "1  Summary",
+        "2  Scope and method",
+        "4  Results by pipe size",
+        "5  Recommended design",
+        "6  Sensitivity",
+        "Limitations and next steps",
+    )
+    for heading in headings:  # fmt: skip
         assert heading in text
     assert report.summary[0] in text
     assert len(doc.inline_shapes) == 1  # the chart
@@ -107,3 +114,21 @@ def test_xlsx(report, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
                 and c.value.startswith("=SUM")]  # fmt: skip
     assert len(formulas) == 2  # direct-cost and total sums stay live in Excel
     assert wb["Years"].max_row == 1 + 18
+
+
+def test_risk_section(search, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    from pipeline_analytics.economics.risk import RiskInputs, monte_carlo
+    from pipeline_analytics.reports import risk_note_for, risk_rows
+
+    designs = [i for i, r in search.evaluated if r.feasible][:2]
+    mc = monte_carlo(designs, RiskInputs(samples=500))
+    rep = report_from_search(search, title="Risk", risk=risk_rows(mc, Money()),
+                             risk_note=risk_note_for(mc))  # fmt: skip
+    assert any("Monte Carlo samples" in s for s in rep.summary)
+    doc = Document(str(write_docx(rep, tmp_path / "r.docx")))
+    text = "\n".join(p.text for p in doc.paragraphs)
+    # no sensitivity section here, so Risk is 6 and Limitations 7 (numbering is automatic)
+    assert "6  Risk (Monte Carlo)" in text and "7  Limitations and next steps" in text
+    wb = load_workbook(write_xlsx(rep, tmp_path / "r.xlsx"))
+    assert "Risk" in wb.sheetnames
+    assert wb["Risk"].cell(row=2, column=6).value == pytest.approx(mc.designs[0].prob_cheapest)

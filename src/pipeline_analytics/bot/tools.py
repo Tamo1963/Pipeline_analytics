@@ -349,22 +349,9 @@ def run_sensitivity(study: Study, a: SensitivityInput) -> dict[str, Any]:
 
 
 def _scale_capital(rates: Any, k: float) -> Any:
-    from pipeline_analytics.cost.rates import UnitRates
+    from pipeline_analytics.cost.rates import scale_capital
 
-    d = rates.model_dump()
-    d["line_pipe"]["base_rate_per_tonne"] *= k
-    d["coating_per_m2"] = {c: v * k for c, v in d["coating_per_m2"].items()}
-    d["concrete_coating_per_m3"] *= k
-    d["laying_per_inch_km"] *= k
-    cr = d["crossings"]
-    cr["hdd_per_inch_m"] *= k
-    cr["open_cut_river_per_inch_m"] *= k
-    cr["per_crossing"] = {c: v * k for c, v in cr["per_crossing"].items()}
-    for f in ("compressor_fixed", "compressor_per_kw", "pump_fixed", "pump_per_kw",
-              "terminal_each", "sectionalising_valve_each", "scraper_station_each"):  # fmt: skip
-        d["stations"][f] *= k
-    d["per_km"] = {c: v * k for c, v in d["per_km"].items()}
-    return UnitRates.model_validate(d)
+    return scale_capital(rates, k)
 
 
 def _report_inputs(study: Study) -> list[tuple[str, str]]:

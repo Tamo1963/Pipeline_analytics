@@ -129,6 +129,18 @@ class CapexEstimate(_Model):
         return "AACE Class 5 (placeholder rates)" if self.placeholder_rates else "per rate source"
 
 
+def with_indirects(direct_excl_land: float, land: float, rates: UnitRates) -> float:
+    """Direct cost plus indirects, built up exactly as in :func:`capex_estimate`.
+
+    ``(D (1 + t + e + o) + L (1 + o)) (1 + c)``
+    """
+    i = rates.indirects
+    return (
+        direct_excl_land * (1 + i.taxes + i.engineering_pmc + i.owners_cost)
+        + land * (1 + i.owners_cost)
+    ) * (1 + i.contingency)
+
+
 def station_items(service: Service, st: StationQty, rates: UnitRates) -> list[LineItem]:
     """Compressor / pump station cost: fixed per station + per installed kW."""
     s = rates.stations

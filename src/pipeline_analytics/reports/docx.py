@@ -117,6 +117,10 @@ def _table(
         run.italic = True
 
 
+def _money_or_dash(v: float) -> str:
+    return "infeasible" if v == float("inf") else f"{v:,.1f}"
+
+
 def _note(doc: DocxDocument, text: str) -> None:
     p = doc.add_paragraph()
     run = p.add_run(text)
@@ -144,15 +148,20 @@ def write_docx(report: StudyReport, path: str | Path | IO[bytes]) -> Path | IO[b
         "options evaluated. " + " ".join(report.disclosures),
     )
 
-    doc.add_heading("1  Summary", level=1)
+    counter = iter(range(1, 20))
+
+    def next_heading(title: str) -> str:
+        return f"{next(counter)}  {title}"
+
+    doc.add_heading(next_heading("Summary"), level=1)
     for line in report.summary:
         doc.add_paragraph(line, style="List Bullet")
 
-    doc.add_heading("2  Scope and method", level=1)
+    doc.add_heading(next_heading("Scope and method"), level=1)
     for line in report.method:
         doc.add_paragraph(line, style="List Bullet")
 
-    doc.add_heading("3  Inputs and assumptions", level=1)
+    doc.add_heading(next_heading("Inputs and assumptions"), level=1)
     if report.inputs:
         _table(doc, ["Input", "Value"], [[k, v] for k, v in report.inputs], [6.5, 10.5])
     if report.assumptions:
@@ -160,7 +169,7 @@ def write_docx(report: StudyReport, path: str | Path | IO[bytes]) -> Path | IO[b
         for a in report.assumptions:
             doc.add_paragraph(a, style="List Bullet")
 
-    doc.add_heading("4  Results by pipe size", level=1)
+    doc.add_heading(next_heading("Results by pipe size"), level=1)
     doc.add_paragraph(
         f"Best grade and MAOP for each size. Money in {m}; lifecycle cost (LCC) is the present "
         "value of CAPEX plus OPEX over the concession."
@@ -217,7 +226,7 @@ def write_docx(report: StudyReport, path: str | Path | IO[bytes]) -> Path | IO[b
     )
 
     b = report.best
-    doc.add_heading("5  Recommended design for further study", level=1)
+    doc.add_heading(next_heading("Recommended design for further study"), level=1)
     walls = ", ".join(f"Class {k}: {v:g} mm" for k, v in b.walls_mm.items())
     doc.add_paragraph(
         f'{b.nps}" API 5L {b.grade} PSL2 at {b.maop_barg:g} barg MAOP. Walls {walls} '
@@ -236,7 +245,7 @@ def write_docx(report: StudyReport, path: str | Path | IO[bytes]) -> Path | IO[b
     _note(doc, "Line-item quantities and rates are in the accompanying workbook (CAPEX sheet).")
 
     if report.sensitivity:
-        doc.add_heading("6  Sensitivity", level=1)
+        doc.add_heading(next_heading("Sensitivity"), level=1)
         doc.add_paragraph("The design is re-optimised in each case.")
         rows = [
             [
@@ -255,7 +264,32 @@ def write_docx(report: StudyReport, path: str | Path | IO[bytes]) -> Path | IO[b
             [6.2, 3.6, 2.2, 2.6, 2.0],
         )
 
-    doc.add_heading("7  Limitations and next steps", level=1)
+    if report.risk:
+        doc.add_heading(next_heading("Risk (Monte Carlo)"), level=1)
+        doc.add_paragraph(
+            "Lifecycle cost percentiles under unit-rate and throughput uncertainty, with the "
+            "share of samples in which each design is the cheapest."
+        )
+        rows = [
+            [
+                r.design,
+                _money_or_dash(r.p10),
+                _money_or_dash(r.p50),
+                _money_or_dash(r.p90),
+                f"{r.prob_cheapest:.0%}",
+                f"{r.prob_infeasible:.0%}",
+            ]
+            for r in report.risk
+        ]
+        _table(
+            doc,
+            ["Design", f"P10 {m}", f"P50 {m}", f"P90 {m}", "Cheapest", "Infeasible"],
+            rows,
+            [5.4, 2.3, 2.3, 2.3, 2.2, 2.2],
+        )
+        _note(doc, report.risk_note)
+
+    doc.add_heading(next_heading("Limitations and next steps"), level=1)
     for line in report.disclosures + ([report.money.note] if report.money.note else []):
         doc.add_paragraph(line, style="List Bullet")
     for line in report.next_steps:
