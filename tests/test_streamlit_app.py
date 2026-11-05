@@ -153,3 +153,12 @@ def test_mechanical_fe_fault_crossing() -> None:
     assert res and res[0].value.endswith("%")
     at.button(key="f_sweep").click().run()
     assert any("Lowest strain utilisation" in s.value for s in at.success)
+
+
+def test_route_tab_geohazard_checks() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=300).run()
+    at.number_input(key="r_k").set_value(2).run()
+    at.button(key="r_geo").click().run()
+    assert not at.exception
+    frames = [d.value for d in at.dataframe]
+    assert any("Strain UR" in getattr(f, "columns", []) for f in frames)

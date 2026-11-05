@@ -8,7 +8,10 @@ Not real terrain. It is built so that the cheapest route is a genuine trade-off:
 * a national highway, a state highway and a railway to cross;
 * a town (Class 3 density) and villages near the straight line;
 * a wetland, a fault zone (high hazard) and an existing power-line ROW in the
-  north that can be shared.
+  north that can be shared;
+* geohazard layers: the fault trace (2 m right-lateral strike-slip) inside the
+  fault zone, and a landslide on the ridge's eastern flank moving downslope
+  (east) by 1 m.
 
 Coordinates are UTM 43N (EPSG:32643) metres around 73.1 E, 22.6 N.
 """
@@ -19,6 +22,7 @@ import numpy as np
 
 from pipeline_analytics.cost.rates import CrossingType
 from pipeline_analytics.routing.aoi import AOI, RIVER, BuildingPoint, LandCover
+from pipeline_analytics.routing.geohazards import Fault, Geohazards, GroundZone
 from pipeline_analytics.routing.grid import Grid
 from pipeline_analytics.routing.rasterize import rasterize_polygons
 
@@ -82,7 +86,29 @@ def sample_aoi(cell_m: float = 100.0) -> AOI:
         for _ in range(25):
             x, y = _pt(vx + rng.normal(0, 0.25), vy + rng.normal(0, 0.25))
             buildings.append(BuildingPoint(x, y))
+    geohazards = Geohazards(
+        faults=(
+            # digitised southwards along the fault zone (x = 26 + 0.1 y km); vertical fault
+            Fault(
+                name="Sample fault",
+                trace=(_pt(26.0, 0.0), _pt(28.4, 24.0)),
+                slip_m=2.0,
+                rake_deg=180.0,
+                zone_half_width_m=290.0,
+            ),
+        ),
+        zones=(
+            GroundZone(
+                name="Ridge landslide",
+                polygon=tuple(_rect(21.2, 1.0, 22.6, 9.0)),
+                kind="landslide",
+                displacement_m=1.0,
+                direction_azimuth_deg=90.0,
+            ),
+        ),
+    )
     return AOI(
+        geohazards=geohazards,
         grid=grid,
         elevation_m=elev,
         land_cover=lc,

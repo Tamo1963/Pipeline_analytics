@@ -21,6 +21,7 @@ from pipeline_analytics.economics.option import evaluate_option
 from pipeline_analytics.mechanical.common import PipeSection
 from pipeline_analytics.mechanical.pressure import LocationClass, pressure_design
 from pipeline_analytics.optimiser import Alignment, DesignSpace, Leg, Town, optimise_design
+from pipeline_analytics.optimiser.fixed_alignment import LegHazard
 from pipeline_analytics.pipespec import WtPolicy, default_library
 from pipeline_analytics.reports.model import SensitivityRow
 
@@ -56,6 +57,23 @@ class TownIn(_In):
     class2_km: float = Field(default=0.0, ge=0)
 
 
+class LegHazardIn(_In):
+    name: str
+    kind: Literal["fault", "landslide", "lateral_spread", "subsidence"]
+    at_km: float = Field(ge=0, description="position within the leg")
+    displacement_m: float = Field(gt=0, description="design fault slip or ground displacement")
+    crossing_angle_deg: float = Field(
+        default=90.0, ge=0, lt=360,
+        description="fault: angle from the pipe to the fault strike; zone: angle from the pipe "
+        "to the ground movement (0 = along the pipe, 90 = across it)",
+    )  # fmt: skip
+    dip_deg: float = Field(default=90.0, gt=0, le=90)
+    rake_deg: float = Field(default=0.0, ge=-180, le=180,
+                            description="0 left-lateral, 180 right-lateral, 90 reverse, "
+                            "-90 normal")  # fmt: skip
+    width_m: float = Field(default=50.0, gt=0, description="zone length along the pipe")
+
+
 class LegIn(_In):
     name: str
     length_km: float = Field(gt=0)
@@ -75,6 +93,10 @@ class LegIn(_In):
     )
     end_offtake_min_barg: float = 0.0
     end_name: str = ""
+    geohazards: list[LegHazardIn] = Field(
+        default_factory=list,
+        description="mapped faults or landslide / lateral-spread / subsidence zones on this leg",
+    )
 
 
 class DefineRouteInput(_In):
@@ -346,6 +368,7 @@ def define_route(study: Study, a: DefineRouteInput) -> dict[str, Any]:
     for leg in a.legs:
         d = leg.model_dump()
         towns = tuple(Town(**t) for t in d.pop("towns"))
+        hazards = tuple(LegHazard(**h) for h in d.pop("geohazards"))
         legs.append(
             Leg(
                 name=d["name"], length_km=d["length_km"], hdd_m=d["wide_river_hdd_m"],
@@ -356,6 +379,7 @@ def define_route(study: Study, a: DefineRouteInput) -> dict[str, Any]:
                 forest_fraction=d["forest_fraction"], elevation_m=d["elevation_m"], towns=towns,
                 end_offtake_share=d["end_offtake_share"],
                 end_offtake_min_pa_g=d["end_offtake_min_barg"] * 1e5, end_name=d["end_name"],
+                geohazards=hazards,
             )
         )  # fmt: skip
     study.alignment = Alignment(name=a.name, legs=tuple(legs), extra_terminals=a.extra_terminals)
@@ -371,6 +395,10 @@ def define_route(study: Study, a: DefineRouteInput) -> dict[str, Any]:
         "km_by_location_class": {k: round(v, 1) for k, v in classes.items()},
         "offtakes": [o.model_dump() for o in al.offtakes()],
         "terminals": q.terminals,
+        "geohazards": [
+            {"name": c.hazard, "kind": c.kind, "chainage_km": round(c.chainage_m / 1000, 2)}
+            for c in al.geohazard_crossings()
+        ],
     }
 
 
@@ -401,11 +429,50 @@ def run_design_search(study: Study, a: DesignSearchInput) -> dict[str, Any]:
     best = study.summary(s.best, s.best_input)
     study.last_best = best
     study.last_search = s
-    return {
+    out: dict[str, Any] = {
         "evaluations": len(s.evaluated),
         "best": best,
         "by_size": table,
         "disclosures": study.disclosures(),
+    }
+    geo = _geohazards(study, s.best_input, s.best)
+    if geo is not None:
+        out["geohazards"] = geo
+    return out
+
+
+def _geohazards(study: Study, inp: Any, res: Any) -> dict[str, Any] | None:
+    """FE strain checks at the route's faults / ground-movement zones for one design."""
+    from pipeline_analytics.optimiser.search import design_geohazards
+
+    _, al = study.require()
+    a = design_geohazards(al.geohazard_crossings(), al.location_class_at, inp, res)
+    if a is None:
+        return None
+    if a.unmitigated:
+        study.assumptions["geohazards"] = "a crossing needs realignment or special design"
+    return {
+        "checks": [
+            {
+                "hazard": c.crossing.hazard,
+                "kind": c.crossing.kind,
+                "chainage_km": round(c.crossing.chainage_m / 1000, 2),
+                "wall_mm": c.wall_mm,
+                "max_tensile_strain_pct": round(c.max_tensile_strain * 100, 3),
+                "max_compressive_strain_pct": round(c.max_compressive_strain * 100, 3),
+                "strain_utilisation": round(c.utilisation, 2),
+                "result": "PASS" if c.passed else "FAIL",
+                "mitigation": c.mitigation or None,
+                "mitigation_cost_usd_m": round(study.usd_m(c.mitigation_cost), 2),
+                "best_crossing_angle_deg": c.best_crossing_angle_deg,
+            }
+            for c in a.checks
+        ],
+        "all_safe_after_mitigation": a.passed,
+        "mitigation_cost_usd_m": round(study.usd_m(a.mitigation_cost), 2),
+        "basis": f"Pipe-soil FE on ALA springs; soil {a.basis.soil.soil_type.value}, cover "
+        f"{a.basis.cover_m:g} m (from the design basis if ALA checks are on, else assumed); "
+        "mitigation cost is not in the lifecycle cost above.",
     }
 
 
@@ -419,6 +486,9 @@ def evaluate_design(study: Study, a: EvaluateDesignInput) -> dict[str, Any]:
         out["stations_by_year"] = [h.stations for h in res.hydraulics]
         out["station_power_mw_by_year"] = [round(h.peak_power_kw / 1000, 2) for h in res.hydraulics]
         out["capex_accuracy"] = res.capex.accuracy_class
+    geo = _geohazards(study, inp, res)
+    if geo is not None:
+        out["geohazards"] = geo
     out["disclosures"] = study.disclosures()
     return out
 
@@ -712,8 +782,10 @@ TOOLS: tuple[Tool, ...] = (
         (
             "Store a fixed route described leg by leg: lengths, wide-river HDD length, narrow "
             "river and road/rail crossings, wetland/urban/forest shares, towns (location-class "
-            "bands) and offtakes at leg ends. Returns length, location-class lengths and "
-            "offtakes."
+            "bands), offtakes at leg ends, and geohazards (mapped faults, landslide / lateral-"
+            "spread / subsidence zones). Returns length, location-class lengths, offtakes and "
+            "geohazards; design search and evaluation then check pipe strain at each "
+            "geohazard."
         ),
         DefineRouteInput,
         define_route,

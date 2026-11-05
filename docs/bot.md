@@ -42,6 +42,7 @@ It also runs in the Streamlit app's **Feasibility bot** tab. Without credentials
 | `run_design_search` | Optimiser over size × grade × MAOP; best design and best per size |
 | `evaluate_design` | One design in detail: CAPEX breakdown, stations and power by year |
 | `run_sensitivity` | Re-optimise under named cases; optionally compare a proposed size |
+| `define_route` geohazards | Faults and landslide / lateral-spread / subsidence zones per leg; design search and evaluation return the strain check and mitigation for each |
 | `ground_movement_check` | Pipe strain from a fault crossing, transverse PGD, settlement or longitudinal PGD (FE model, `docs/mechanical-fe.md`); optional crossing-angle sweep |
 | `run_risk_analysis` | Monte Carlo on the last search: lifecycle-cost P10/P50/P90 per size and the probability each is cheapest (see `docs/hardening.md`) |
 | `generate_report` | Word report and Excel workbook from the last design search, sensitivity and risk (see `docs/reports.md`) |

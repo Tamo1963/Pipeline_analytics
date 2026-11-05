@@ -400,7 +400,13 @@ A domain expert assistant ("pipeline feasibility engineer") that:
 
   Verification: it matches the closed forms, and against the Karamitros et al. (2007) strike-slip benchmark the axial force agrees within 2.5 % and peak strain within 10 % in 9 of 12 cases. It is conservative by up to 28 % at intermediate offsets.
 
+* Geohazards are linked into routing (`docs/routing.md` §6):
+  * fault traces and landslide, lateral-spread and subsidence zones are burnt into the hazard raster and found as crossings on every alignment;
+  * each crossing is strain-checked with the FE model, and heavier wall is priced where needed;
+  * a failing fault crossing is realigned at its best angle, and the optimiser picks between mitigation and realignment on lifecycle cost;
+  * leg-based routes and the bot take the same hazards.
+
 **Next steps:**
 * run the bot benchmark with credentials;
 * load project rates (`pipeline-rates new`) in place of the placeholder set;
-* link mapped faults and landslide zones from the GIS layers to `ground_movement_check` during routing.
+* calibrate soil springs and the steel curve per project.

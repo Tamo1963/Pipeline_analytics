@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass, field
 from enum import IntEnum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -15,6 +15,11 @@ from pipeline_analytics.codes.class_location import Building
 from pipeline_analytics.cost.rates import CrossingType, LandUse, Terrain
 from pipeline_analytics.routing.grid import Grid
 from pipeline_analytics.routing.rasterize import XY, rasterize_lines, rasterize_polygons
+
+if TYPE_CHECKING:
+    from pipeline_analytics.routing.geohazards import Geohazards
+
+ZONE_KINDS = ("landslide", "lateral_spread", "subsidence")
 
 
 class LandCover(IntEnum):
@@ -76,6 +81,9 @@ class AOI:
     """Wide water bodies (rivers as polygons, reservoirs): crossed by HDD."""
     lines: dict[str, list[list[XY]]] = field(default_factory=dict)
     buildings: list[BuildingPoint] = field(default_factory=list)
+    geohazards: Geohazards | None = None
+    """Mapped faults and ground-movement zones. They are burnt into ``hazard`` (max
+    class) and checked for strain on every route (see routing.geohazards)."""
 
     def __post_init__(self) -> None:
         shape = self.grid.shape
@@ -95,6 +103,9 @@ class AOI:
         if unknown:
             raise ValueError(f"unknown linear feature kinds: {sorted(unknown)}")
         self._line_masks: dict[str, NDArray[np.bool_]] = {}
+        if self.geohazards:
+            burnt = self.geohazards.hazard_raster(self.grid)
+            self.hazard = burnt if self.hazard is None else np.maximum(self.hazard, burnt)
 
     def layer(self, name: str) -> NDArray[np.bool_]:
         arr = getattr(self, name)
@@ -129,9 +140,19 @@ def load_geojson_features(path: str | Path) -> dict[str, Any]:
     * LineString / MultiLineString: one of ``LINEAR_KINDS`` (river, national_highway, ...)
     * Polygon / MultiPolygon: ``water``, ``protected`` or ``corridor``
     * Point: ``building``, with optional ``dwelling_units`` and ``storeys``
+    * LineString ``fault`` with ``name``, ``slip_m`` and optional ``dip_deg``,
+      ``rake_deg``, ``zone_half_width_m`` (digitised with the fault dipping to the right)
+    * Polygon ``landslide`` / ``lateral_spread`` / ``subsidence`` with ``name``,
+      ``displacement_m`` and (not for subsidence) ``direction_azimuth_deg``
 
-    Returns ``{"lines": {kind: [...]}, "polygons": {layer: [...]}, "buildings": [...]}``.
+    Returns ``{"lines": {kind: [...]}, "polygons": {layer: [...]}, "buildings": [...],
+    "geohazards": Geohazards}``.
     """
+    from pipeline_analytics.routing.geohazards import Fault, Geohazards, GroundZone
+
+    faults: list[Fault] = []
+    zones: list[GroundZone] = []
+    skip = {"kind", "name"}
     data = json.loads(Path(path).read_text())
     lines: dict[str, list[list[XY]]] = {}
     polys: dict[str, list[list[XY]]] = {}
@@ -140,6 +161,17 @@ def load_geojson_features(path: str | Path) -> dict[str, Any]:
         geom, props = f["geometry"], f.get("properties") or {}
         kind = str(props.get("kind", ""))
         t, coords = geom["type"], geom["coordinates"]
+        name = str(props.get("name", f"{kind} {len(faults) + len(zones) + 1}"))
+        extra = {k: v for k, v in props.items() if k not in skip}
+        if kind == "fault" and t in ("LineString", "MultiLineString"):
+            for part in [coords] if t == "LineString" else coords:
+                faults.append(Fault(name=name, trace=tuple((p[0], p[1]) for p in part), **extra))
+            continue
+        if kind in ZONE_KINDS and t in ("Polygon", "MultiPolygon"):
+            for ring in [coords[0]] if t == "Polygon" else [p[0] for p in coords]:
+                poly = tuple((p[0], p[1]) for p in ring)
+                zones.append(GroundZone(name=name, kind=kind, polygon=poly, **extra))
+            continue
         if t in ("LineString", "MultiLineString"):
             parts = [coords] if t == "LineString" else coords
             lines.setdefault(kind, []).extend([[(p[0], p[1]) for p in part] for part in parts])
@@ -155,7 +187,12 @@ def load_geojson_features(path: str | Path) -> dict[str, Any]:
                     int(props.get("storeys", 1)),
                 )
             )
-    return {"lines": lines, "polygons": polys, "buildings": buildings}
+    return {
+        "lines": lines,
+        "polygons": polys,
+        "buildings": buildings,
+        "geohazards": Geohazards(faults=tuple(faults), zones=tuple(zones)),
+    }
 
 
 def aoi_from_layers(
@@ -179,5 +216,6 @@ def aoi_from_layers(
         land_cover=land_cover,
         lines=features["lines"],
         buildings=features["buildings"],
+        geohazards=features.get("geohazards") or None,
         **layers,
     )

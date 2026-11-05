@@ -37,8 +37,9 @@ Fault crossings, transverse PGD (lateral spread or landslide), settlement and lo
 `crossing_angle_sweep` returns the strain utilisation for a range of crossing angles and the best angle.
 
 **Where it appears:**
-* **Streamlit:** Mechanical tab, "Ground movement" expander, with a crossing-angle sweep.
-* **Bot:** the `ground_movement_check` tool.
+* **Streamlit:** Mechanical tab, "Ground movement" expander, with a crossing-angle sweep; Route tab, geohazard crossings.
+* **Bot:** the `ground_movement_check` tool; route geohazards in `define_route`.
+* **Routing:** every crossing of a mapped fault or ground-movement zone is checked, mitigated or realigned (`docs/routing.md` §6).
 
 ## Verification (`tests/mechanical/test_fe.py`, `test_fe_benchmarks.py`)
 

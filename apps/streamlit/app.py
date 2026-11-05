@@ -903,10 +903,23 @@ def _route(nps: str, pressure_barg: float, k: int, base_json: str) -> tuple:  # 
     return surf.grid.crs, alts, exs, res, img
 
 
+@st.cache_data(show_spinner="Checking fault and landslide crossings (FE model)...")
+def _route_geo(nps: str, pressure_barg: float, k: int, base_json: str) -> list[Any]:
+    from pipeline_analytics.optimiser.search import corridor_geohazards
+
+    _, _, exs, res, _ = _route(nps, pressure_barg, k, base_json)
+    base_inp = OptionInput.model_validate_json(base_json)
+    return [
+        corridor_geohazards(ex, ex.option_input(base_inp), r)
+        for ex, r in zip(exs, res, strict=True)
+    ]
+
+
 with route_tab:
     st.caption(
         "Least-cost routing on a SYNTHETIC 40 x 24 km sample area (ridge with a northern saddle, "
-        "protected forest, 400 m river, highways, railway, town, wetland, fault zone). "
+        "protected forest, 400 m river, highways, railway, town, wetland, a mapped fault and a "
+        "landslide). "
         "Cell costs use the same unit rates as the Economics tab. Real areas: load a DEM, "
         "land cover and GeoJSON features (see docs/routing.md)."
     )
@@ -939,6 +952,8 @@ with route_tab:
                     "Crossings": ", ".join(f"{k} {v}" for k, v in ex.crossings.items()),
                     "HDD m": round(ex.hdd_m),
                     "Fault zone m": round(ex.hazard_m.get(3, 0.0)),
+                    "Geohazard crossings": ", ".join(c.hazard for c in ex.geohazard_crossings)
+                    or "none",
                     "Class 2+ m": round(
                         sum(
                             sg.length_m
@@ -953,6 +968,39 @@ with route_tab:
             ],
             hide_index=True,
         )
+        st.markdown("**Geohazard crossings: pipe strain (FE model on ALA springs)**")
+        st.caption(
+            "Each fault or landslide crossing is checked with the design's wall for the location "
+            "class at that chainage. Where a strain limit is exceeded, the lightest heavier wall "
+            "that passes is priced, and for faults the best crossing angle is reported. The route "
+            "optimiser (optimise_route) also tries a realigned corridor and compares lifecycle "
+            "cost. Soil: dense sand, 1.2 m cover (assumed)."
+        )
+        if st.button("Check geohazard crossings", key="r_geo"):
+            st.session_state.r_geo_key = (r_nps, r_p, int(r_k), r_base.model_dump_json())
+        if st.session_state.get("r_geo_key") == (r_nps, r_p, int(r_k), r_base.model_dump_json()):
+            geo = _route_geo(r_nps, r_p, int(r_k), r_base.model_dump_json())
+            rows_g = [
+                {
+                    "Corridor": f"C{i + 1}",
+                    "Hazard": c.crossing.hazard,
+                    "Type": c.crossing.kind,
+                    "Chainage km": round(c.crossing.chainage_m / 1000, 2),
+                    "Angle °": None if c.crossing.crossing_angle_deg is None
+                    else round(c.crossing.crossing_angle_deg % 180, 1),
+                    "Wall mm": c.wall_mm,
+                    "Strain UR": round(c.utilisation, 2),
+                    "Result": "PASS" if c.passed else "FAIL",
+                    "Mitigation": c.mitigation or "-",
+                    "Mitigation ₹ cr": round(crore(c.mitigation_cost), 2),
+                    "Best angle °": c.best_crossing_angle_deg,
+                }
+                for i, a in enumerate(geo) if a is not None for c in a.checks
+            ]  # fmt: skip
+            if rows_g:
+                st.dataframe(rows_g, hide_index=True)
+            else:
+                st.info("No corridor crosses a mapped fault or ground-movement zone.")
         items = [
             (f"C{i + 1}", ex.polyline, {"length_km": round(ex.length_m / 1000, 2)})
             for i, ex in enumerate(exs)
@@ -969,9 +1017,36 @@ with route_tab:
             ]  # fmt: skip
             lons = [p[0] for d in paths for p in d["path"]]
             lats = [p[1] for d in paths for p in d["path"]]
+            gh = route_sample.sample_aoi().geohazards
+            hz_lines = [
+                {"name": f"{f.name} ({f.slip_m:g} m slip)",
+                 "path": [list(p) for p in to_wgs84(list(f.trace), crs)]}
+                for f in (gh.faults if gh else ())
+            ]  # fmt: skip
+            hz_polys = [
+                {"name": f"{z.name} ({z.kind}, {z.displacement_m:g} m)",
+                 "polygon": [list(p) for p in to_wgs84(list(z.polygon), crs)]}
+                for z in (gh.zones if gh else ())
+            ]  # fmt: skip
             st.pydeck_chart(
                 pdk.Deck(
                     layers=[
+                        pdk.Layer(
+                            "PolygonLayer",
+                            hz_polys,
+                            get_polygon="polygon",
+                            get_fill_color=[232, 163, 23, 70],
+                            get_line_color=[232, 163, 23],
+                            pickable=True,
+                        ),
+                        pdk.Layer(
+                            "PathLayer",
+                            hz_lines,
+                            get_path="path",
+                            get_color=[179, 38, 30],
+                            width_min_pixels=2,
+                            pickable=True,
+                        ),
                         pdk.Layer(
                             "PathLayer",
                             paths,
@@ -979,7 +1054,7 @@ with route_tab:
                             get_color="color",
                             width_min_pixels=3,
                             pickable=True,
-                        )
+                        ),
                     ],
                     initial_view_state=pdk.ViewState(
                         longitude=sum(lons) / len(lons), latitude=sum(lats) / len(lats), zoom=9
@@ -988,7 +1063,8 @@ with route_tab:
                 ),
                 key="route_map",
             )
-            st.caption("Corridors on a real basemap (synthetic sample area near 73.1 E, 22.6 N).")
+            st.caption("Corridors on a real basemap (synthetic sample area near 73.1 E, 22.6 N); "
+                       "fault trace in red, landslide zone in amber.")  # fmt: skip
         except ImportError:
             st.info("Install the 'gis' extra (pyproj) for the map view.")
         d1, d2 = st.columns(2)

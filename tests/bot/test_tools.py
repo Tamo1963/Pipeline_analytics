@@ -133,6 +133,27 @@ def test_ground_movement_check() -> None:
     assert s["result"] == "PASS"
 
 
+def test_route_geohazards_checked_in_search() -> None:
+    s = Study()
+    call(s, "set_design_basis", BASIS)
+    route = {"name": "Faulted", "legs": [
+        {"name": "A-B", "length_km": 60, "geohazards": [
+            {"name": "F1", "kind": "fault", "at_km": 20, "displacement_m": 1.0,
+             "crossing_angle_deg": 120},
+            {"name": "Slide", "kind": "landslide", "at_km": 40, "displacement_m": 0.5,
+             "width_m": 80, "crossing_angle_deg": 90}]},
+        {"name": "B-C", "length_km": 40}]}  # fmt: skip
+    r = call(s, "define_route", route)
+    assert [g["name"] for g in r["geohazards"]] == ["F1", "Slide"]
+    d = call(s, "run_design_search", {"sizes": ["20"], "grades": ["X70"]})
+    checks = {c["hazard"]: c for c in d["geohazards"]["checks"]}
+    assert checks["F1"]["result"] == "FAIL"  # 120 deg strike-slip: compression
+    assert checks["F1"]["mitigation"] and checks["F1"]["best_crossing_angle_deg"] < 90
+    assert checks["Slide"]["result"] in {"PASS", "FAIL"}
+    e = call(s, "evaluate_design", {"nps": "20"})
+    assert "geohazards" in e
+
+
 def test_generate_report_needs_a_search() -> None:
     text, err = run_tool(Study(), "generate_report", {"title": "Test"})
     assert err and "run_design_search" in text

@@ -45,7 +45,7 @@ def ala_springs():  # type: ignore[no-untyped-def]
 
 @pytest.mark.parametrize("model", ["ramberg_osgood", "bilinear", "elastic"])
 def test_stress_inverts_strain(model: str) -> None:
-    c = SteelCurve(model=model, yield_pa=448e6, n=10, r=12)  # type: ignore[arg-type]
+    c = SteelCurve(model=model, yield_pa=448e6, n=10, r=12)
     for s in (-600e6, -448e6, -100e6, 0.0, 200e6, 448e6, 520e6):
         if model != "elastic" or abs(s) <= 448e6:
             sig, _ = c.stress(np.array([c.strain_of(s)]))

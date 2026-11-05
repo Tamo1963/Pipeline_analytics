@@ -79,7 +79,7 @@ def test_route_loop_converges_on_sample_area() -> None:
     assert ro.converged
     # The router's surface objective approximates LCC but is not identical to it, so a
     # re-route can come out marginally worse; the optimiser keeps the best found so far.
-    assert ro.best.lcc_pv == pytest.approx(min(ro.history))
+    assert ro.best_lcc_with_geohazards == pytest.approx(min(ro.history))
     assert abs(ro.history[-1] - ro.history[-2]) / ro.history[-2] < 0.005
     assert ro.best_route.protected_m == 0
     groups = [n for n in ro.tree.nodes if n.issue == "group"]

@@ -18,6 +18,7 @@ All layers sit on one `Grid` in projected metres (e.g. UTM 43N, EPSG:32643).
 | `land_cover` | raster of `LandCover` codes (map ESA WorldCover etc.) | terrain, land use (ROU cost) |
 | `rock` | bool raster | rock terrain |
 | `hazard` | 0–3 raster (faults, landslide, liquefaction) | construction factor ×1.0/1.1/1.3/2.0 |
+| `geohazards` | fault traces and ground-movement zones (section 6) | burnt into `hazard`; pipe strain checked on every route |
 | `protected` | bool (sanctuaries, national parks, ASI sites) | excluded (or ×5 penalty) |
 | `corridor` | bool (existing ROW that can be shared) | land + construction ×0.85 |
 | `water` | bool (wide rivers, reservoirs) | HDD cost per metre, no land cost |
@@ -80,3 +81,34 @@ It works equally for router output and for an alignment you supply (e.g. digitis
 * 16-neighbour search (smoother, shorter grid paths).
 * Iterating route ↔ hydraulics ↔ diameter to convergence (Phase 5 optimiser).
 * Crossing-angle rules (e.g. near-perpendicular road/rail crossings), bend-radius constraints, and minimum distances from buildings (OISD/T4S) as hard constraints.
+
+## 6. Geohazards: faults and ground-movement zones (`routing/geohazards.py`)
+
+Mapped hazards are vector layers with design movements. They come from GeoJSON (`kind` = `fault`, `landslide`, `lateral_spread` or `subsidence`) or are built in code:
+
+| Layer | Geometry | Properties |
+|---|---|---|
+| `Fault` | trace (polyline) | `slip_m`, `dip_deg`, `rake_deg` (0 left-lateral, 180 right-lateral, 90 reverse, −90 normal), `zone_half_width_m` (hazard band). Digitise the trace so the fault **dips to the right** (Aki–Richards strike). |
+| `GroundZone` | polygon | `kind`, `displacement_m`, `direction_azimuth_deg` (landslide / lateral spread, clockwise from north), `pattern` (cosine or block) |
+
+How they link into routing:
+
+1. **Cost surface.** Fault bands and zones are burnt into `hazard` (maximum class), so the router avoids them as before.
+2. **Crossings.** `extract_route` lists every crossing (`RouteExtraction.geohazard_crossings`):
+   * for a fault: chainage, the crossing angle (from the pipe direction to the strike), and the slip resolved into axial, transverse and vertical components for the block ahead;
+   * for a zone: the length of pipe inside it and the movement in pipe axes.
+3. **Strain check.** `assess_geohazards` runs the pipe–soil FE model (`docs/mechanical-fe.md`) at each crossing, using the design's wall for the location class there. If a strain limit is exceeded, it prices the lightest standard wall that passes over the affected length (zone + 2 × max(100 m, 50 D)), with indirects. For faults it also reports the best crossing angle from a 30–150° sweep.
+4. **Realignment.** `realign_fault_crossing` routes to a waypoint 1.5 km before the fault, crosses on a straight leg at the chosen angle, and routes on from a waypoint 1.5 km after it. The leg is straight because the hazard band otherwise pulls the router back to a perpendicular crossing.
+5. **Optimiser.** `optimise_route` checks every corridor's best design:
+   * The present value of the mitigation cost is added to the corridor's lifecycle cost.
+   * Corridors with a crossing that no standard wall can make safe rank last.
+   * A failing fault crossing also spawns a realigned variant (`C1-realigned 30 deg`), which is evaluated in full. Heavier wall in place and realignment then compete on lifecycle cost.
+
+Fixed (leg-by-leg) routes take the same hazards per leg (`Leg.geohazards`: kind, position, displacement, angle). The bot's `define_route` accepts them, and `run_design_search` / `evaluate_design` return the strain checks and mitigation for the design.
+
+**Sample area.** It now carries the fault trace inside its fault band (2 m right-lateral, crossed at about 84°: the pipe is stretched, strain utilisation 0.74 for 24" X70, passes) and a landslide on the ridge's eastern flank. With left-lateral slip the same crossing is compressed and fails at 1 m. Two remedies are then available:
+
+* a 12.7 mm wall over 200 m (about ₹0.09 crore);
+* a realigned crossing at 30°: strain utilisation 0.36, but 2.8 km longer.
+
+The optimiser weighs the two on lifecycle cost.

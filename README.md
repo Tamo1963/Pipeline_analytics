@@ -15,7 +15,7 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 2b | Class location and liquid/gas hydraulics with station siting: see [`docs/hydraulics-class-location.md`](docs/hydraulics-class-location.md) | ✅ done |
 | 2c | Pipe–soil FE model: fault crossings, transverse PGD, settlement, crossing-angle sweep; benchmarked against Karamitros et al. (2007): see [`docs/mechanical-fe.md`](docs/mechanical-fe.md) | ✅ done |
 | 3 | Cost and lifecycle economics (placeholder rates): see [`docs/cost-economics.md`](docs/cost-economics.md) | ✅ done |
-| 4 | Route / alignment engine: see [`docs/routing.md`](docs/routing.md) | ✅ done |
+| 4 | Route / alignment engine, with mapped faults and landslides strain-checked, mitigated or realigned: see [`docs/routing.md`](docs/routing.md) | ✅ done |
 | 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
 | 6 | Feasibility bot (Claude agent over the engine tools, number guardrail): see [`docs/bot.md`](docs/bot.md) | ✅ built; live benchmark pending credentials |
 | 7 | Reports & UI: Word/Excel study reports, chat-to-report, map view: see [`docs/reports.md`](docs/reports.md) | ✅ done |

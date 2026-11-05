@@ -20,8 +20,10 @@ from pipeline_analytics.cost.boq import RouteQuantities
 from pipeline_analytics.cost.rates import CrossingType, LandUse, Terrain
 from pipeline_analytics.economics.option import OptionInput
 from pipeline_analytics.hydraulics.profile import Profile
+from pipeline_analytics.mechanical.pressure import LocationClass
 from pipeline_analytics.routing.aoi import LINEAR_KINDS, RIVER, LandCover, to_buildings
 from pipeline_analytics.routing.cost_surface import LAND_USES, TERRAINS, CostSurface
+from pipeline_analytics.routing.geohazards import HazardCrossing, find_crossings
 from pipeline_analytics.routing.geometry import chainage_offset, route_length
 
 XY = tuple[float, float]
@@ -71,6 +73,14 @@ class RouteExtraction:
     corridor_shared_m: float
     class_segments: tuple[ClassSegment, ...]
     route: RouteQuantities
+    geohazard_crossings: tuple[HazardCrossing, ...] = ()
+    """Faults and ground-movement zones this alignment crosses (needs AOI.geohazards)."""
+
+    def location_class_at(self, chainage_m: float) -> LocationClass:
+        for s in self.class_segments:
+            if s.start_m - 1e-6 <= chainage_m <= s.end_m + 1e-6:
+                return s.location_class
+        return LocationClass.CLASS_1_DIV_2
 
     def option_input(self, base: OptionInput) -> OptionInput:
         """``base`` with this alignment's profile, classes and quantities (validated rebuild)."""
@@ -191,6 +201,7 @@ def extract_route(
         corridor_shared_m=corridor_m,
         class_segments=segs,
         route=route,
+        geohazard_crossings=tuple(find_crossings(line, aoi.geohazards)) if aoi.geohazards else (),
     )
 
 

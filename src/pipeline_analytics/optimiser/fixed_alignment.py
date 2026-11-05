@@ -10,6 +10,9 @@ Every quantity is an *input assumption*; studies should record its source.
 
 from __future__ import annotations
 
+import math
+from typing import TYPE_CHECKING, Literal
+
 from pydantic import Field, model_validator
 
 from pipeline_analytics.codes.class_location import ClassSegment
@@ -19,6 +22,9 @@ from pipeline_analytics.cost.rates import CrossingType, LandUse, Terrain, _Model
 from pipeline_analytics.economics.option import OptionInput
 from pipeline_analytics.hydraulics.profile import Offtake, Profile
 from pipeline_analytics.mechanical.pressure import LocationClass
+
+if TYPE_CHECKING:
+    from pipeline_analytics.routing.geohazards import HazardCrossing
 
 _RANK = {
     LocationClass.CLASS_1_DIV_2: 1,
@@ -36,6 +42,24 @@ class Town(_Model):
     class2_km: float = Field(default=0.0, ge=0, description="Class 2 length each side of Class 3")
 
 
+class LegHazard(_Model):
+    """A mapped fault or ground-movement zone on a leg (no GIS geometry needed)."""
+
+    name: str
+    kind: Literal["fault", "landslide", "lateral_spread", "subsidence"]
+    at_km: float = Field(ge=0, description="position within the leg (zone centre)")
+    displacement_m: float = Field(gt=0, description="fault slip or ground displacement")
+    crossing_angle_deg: float = Field(
+        default=90.0, ge=0, lt=360,
+        description="fault: pipe direction to fault strike (counter-clockwise, Aki-Richards "
+        "strike); zone: pipe direction to the movement direction",
+    )  # fmt: skip
+    dip_deg: float = Field(default=90.0, gt=0, le=90)
+    rake_deg: float = Field(default=0.0, ge=-180, le=180)
+    width_m: float = Field(default=50.0, gt=0, description="zone length along the pipe")
+    pattern: Literal["cosine", "block"] = "cosine"
+
+
 class Leg(_Model):
     name: str
     length_km: float = Field(gt=0)
@@ -51,6 +75,7 @@ class Leg(_Model):
     wasteland_fraction: float = Field(default=0.0, ge=0, le=1)
     elevation_m: float = 0.0
     towns: tuple[Town, ...] = ()
+    geohazards: tuple[LegHazard, ...] = ()
     end_offtake_share: float = Field(default=0.0, ge=0, lt=1, description="of the inlet flow")
     end_offtake_min_pa_g: float = 0.0
     end_name: str = ""
@@ -123,6 +148,46 @@ class Alignment(_Model):
                     )  # fmt: skip
                 s0 = i
         return tuple(segs)
+
+    def location_class_at(self, chainage_m: float) -> LocationClass:
+        for seg in self.class_segments():
+            if seg.start_m - 1e-6 <= chainage_m <= seg.end_m + 1e-6:
+                return seg.location_class
+        return LocationClass.CLASS_1_DIV_2
+
+    def geohazard_crossings(self) -> tuple[HazardCrossing, ...]:
+        """Leg hazards as crossings for ``routing.geohazards.assess_geohazards``."""
+        from pipeline_analytics.mechanical.pgd import GroundMovement, fault_movement, settlement
+        from pipeline_analytics.routing.geohazards import HazardCrossing
+
+        out = []
+        for start, leg in zip(self.leg_starts_m(), self.legs, strict=True):
+            for h in leg.geohazards:
+                ch = start + h.at_km * 1000
+                if h.kind == "fault":
+                    mv = fault_movement(h.displacement_m, h.crossing_angle_deg,
+                                        dip_deg=h.dip_deg, rake_deg=h.rake_deg)  # fmt: skip
+                    out.append(HazardCrossing(
+                        hazard=h.name, kind="fault", chainage_m=ch, point=(ch, 0.0),
+                        crossing_angle_deg=h.crossing_angle_deg, movement=mv,
+                        slip_m=h.displacement_m, dip_deg=h.dip_deg, rake_deg=h.rake_deg,
+                    ))  # fmt: skip
+                    continue
+                if h.kind == "subsidence":
+                    mv = settlement(h.displacement_m, h.width_m)
+                else:
+                    a = math.radians(h.crossing_angle_deg)
+                    mv = GroundMovement(
+                        kind=h.pattern, width_m=h.width_m,
+                        axial_m=h.displacement_m * math.cos(a),
+                        transverse_m=h.displacement_m * math.sin(a),
+                        label=f"{h.kind} {h.displacement_m:g} m over {h.width_m:g} m",
+                    )  # fmt: skip
+                out.append(HazardCrossing(
+                    hazard=h.name, kind=h.kind, chainage_m=ch, point=(ch, 0.0),
+                    crossing_angle_deg=h.crossing_angle_deg, width_m=h.width_m, movement=mv,
+                ))  # fmt: skip
+        return tuple(sorted(out, key=lambda c: c.chainage_m))
 
     def offtakes(self) -> tuple[Offtake, ...]:
         out = []

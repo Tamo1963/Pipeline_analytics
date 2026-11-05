@@ -99,20 +99,27 @@ def fault_movement(
 ) -> GroundMovement:
     """Fault slip resolved into pipe axes.
 
-    ``crossing_angle_deg`` (beta) is the angle between the pipe axis and the
-    fault strike. Rake (Aki-Richards): 0 = strike-slip, +90 = reverse, -90 =
-    normal. The block on the +x side is the hanging wall. The sign convention
-    puts strike-slip with beta < 90 deg in axial tension (favourable) and
-    beta > 90 deg in compression.
+    ``crossing_angle_deg`` (beta) is the angle from the pipe axis (+x) to the
+    fault strike, counter-clockwise, 0-360. Strike follows Aki-Richards (the
+    fault dips to the right of the strike), and rake: 0 = left-lateral, 180 =
+    right-lateral, +90 = reverse, -90 = normal. For 0 < beta < 180 the block
+    ahead of the crossing (+x) is the hanging wall; for 180 < beta < 360 it
+    is the footwall. Left-lateral slip with beta < 90 deg stretches the pipe
+    (favourable); beta between 90 and 180 deg compresses it.
     """
     b, dip, rake = map(math.radians, (crossing_angle_deg, dip_deg, rake_deg))
     ds, dd = slip_m * math.cos(rake), slip_m * math.sin(rake)
     dh = dd * math.cos(dip)  # horizontal dip-slip, positive = shortening (reverse)
+    sx, sy = math.cos(b), math.sin(b)  # strike in pipe axes
+    nx, ny = sy, -sx  # right of strike: towards the hanging wall
+    # hanging-wall movement relative to the footwall
+    mx, my, mz = ds * sx - dh * nx, ds * sy - dh * ny, dd * math.sin(dip)
+    sign = 1.0 if nx > 0 or (nx == 0 and ny < 0) else -1.0  # is +x on the hanging wall?
     return GroundMovement(
         kind="fault",
-        axial_m=ds * math.cos(b) - dh * math.sin(b),
-        transverse_m=ds * math.sin(b) + dh * math.cos(b),
-        vertical_m=dd * math.sin(dip),
+        axial_m=sign * mx,
+        transverse_m=sign * my,
+        vertical_m=sign * mz,
         label=f"fault slip {slip_m:g} m, crossing {crossing_angle_deg:g} deg, dip {dip_deg:g}, "
         f"rake {rake_deg:g}",
     )
