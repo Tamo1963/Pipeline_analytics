@@ -98,3 +98,8 @@ def test_basis_route_search_evaluate_sensitivity() -> None:
     st = call(s, "get_study", {})
     assert st["scenarios_evaluated"] >= 3 + 1 + 4
     assert TOOL_BY_NAME["get_study"].name == "get_study"
+
+
+def test_generate_report_needs_a_search() -> None:
+    text, err = run_tool(Study(), "generate_report", {"title": "Test"})
+    assert err and "run_design_search" in text

@@ -18,7 +18,8 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 4 | Route / alignment engine: see [`docs/routing.md`](docs/routing.md) | ✅ done |
 | 5 | Optimiser (design search, route iteration, scenario tree): see [`docs/optimiser.md`](docs/optimiser.md); test case [`studies/bhola_khulna/REPORT.md`](studies/bhola_khulna/REPORT.md) | ✅ done |
 | 6 | Feasibility bot (Claude agent over the engine tools, number guardrail): see [`docs/bot.md`](docs/bot.md) | ✅ built; live benchmark pending credentials |
-| 7 | Reports & UI | next |
+| 7 | Reports & UI: Word/Excel study reports, chat-to-report, map view: see [`docs/reports.md`](docs/reports.md) | ✅ done |
+| 8 | Hardening: Monte Carlo, project rate management, multi-user | next |
 
 ## Development
 
@@ -56,7 +57,8 @@ src/pipeline_analytics/
   routing/      AOI layers, cost surface, least-cost path, alternatives, extraction, GeoJSON/KML
   optimiser/    design search, route iteration, scenario tree, fixed-alignment studies
   bot/          feasibility bot: Claude agent, tools, guardrail, benchmark (`pipeline-bot`)
-  reports/ api/                                      (Phase 7)
+  reports/      study report model; Word report and Excel workbook writers
+  api/          FastAPI service layer (planned)
 apps/streamlit/ UI
 studies/       worked studies (Bhola - Khulna test case)
 data/           sample costs, sample GIS (later phases)

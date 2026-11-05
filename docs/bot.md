@@ -42,6 +42,7 @@ It also runs in the Streamlit app's **Feasibility bot** tab. Without credentials
 | `run_design_search` | Optimiser over size × grade × MAOP; best design and best per size |
 | `evaluate_design` | One design in detail: CAPEX breakdown, stations and power by year |
 | `run_sensitivity` | Re-optimise under named cases; optionally compare a proposed size |
+| `generate_report` | Word report and Excel workbook from the last design search and sensitivity (see `docs/reports.md`) |
 | `get_study` | Study state, scenarios evaluated, disclosures |
 
 ## Number guardrail

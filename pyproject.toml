@@ -27,6 +27,7 @@ gis = ["pyproj>=3.6"]
 bot = [
     "anthropic>=2.5.0",
 ]
+reports = ["python-docx>=1.1", "openpyxl>=3.1", "pillow>=10.1"]
 
 [dependency-groups]
 dev = [
@@ -37,6 +38,7 @@ dev = [
     "types-PyYAML>=6.0",
     "pandas-stubs>=2.2",
     "scipy-stubs>=1.14",
+    "types-openpyxl>=3.1",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -55,6 +57,7 @@ select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
 "studies/**/make_report.py" = ["E501"]
 # HTML page template: long markup lines and typographic dashes are intended
 "studies/**/make_html.py" = ["E501", "RUF001"]
+"studies/**/make_docs.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -63,7 +66,7 @@ files = ["src", "tests", "apps", "studies"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["pint.*"]
+module = ["pint.*", "pydeck.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

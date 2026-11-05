@@ -5,6 +5,9 @@ Run with:  uv run streamlit run apps/streamlit/app.py
 
 from __future__ import annotations
 
+import io
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -590,6 +593,42 @@ with econ_tab:
                 ],
                 hide_index=True,
             )
+        # study report downloads (same report model as the bot and study scripts)
+        try:
+            from pipeline_analytics.reports import Money, report_from_options
+            from pipeline_analytics.reports.docx import write_docx
+            from pipeline_analytics.reports.xlsx import write_xlsx
+
+            ev = [
+                (OptionInput.model_validate({**base.model_dump(), "nps": n}), r)
+                for n, r in zip(e_sizes, results, strict=True)
+            ]
+            rep = report_from_options(
+                ev,
+                title="Pipeline Diameter Screening",
+                subtitle=f"{e_service.value} service, {e_prof.length_m / 1000:g} km route",
+                money=Money.inr_crore(),
+                target_return=e_target,
+                inputs=[
+                    ("Throughput", f"{e_q0:g} -> {e_q1:g} {unit} over {int(e_ramp)} yr"),
+                    ("Operating years", f"{int(e_years)}"),
+                    ("Discount rate (real)", f"{e_rate:.1%}"),
+                    ("Design pressure", f"{e_p:g} barg"),
+                ],
+                disclosures=["PLACEHOLDER unit rates (screening only)."]
+                if e_rates.placeholder
+                else [],
+            )
+            b_docx, b_xlsx = io.BytesIO(), io.BytesIO()
+            write_docx(rep, b_docx)
+            write_xlsx(rep, b_xlsx)
+            r1, r2 = st.columns(2)
+            r1.download_button("Download report (Word)", b_docx.getvalue(),
+                               "pipeline_screening.docx", key="e_docx")  # fmt: skip
+            r2.download_button("Download workbook (Excel)", b_xlsx.getvalue(),
+                               "pipeline_screening.xlsx", key="e_xlsx")  # fmt: skip
+        except ImportError:
+            st.info("Install the 'reports' extra for Word and Excel reports.")
         if st.button("Run sensitivity (±20 %) on the best option", key="e_tornado"):
             best_inp = base.model_copy(update={"nps": best.nps})
             torn = option_tornado(best_inp, 0.2)
@@ -693,6 +732,40 @@ with route_tab:
             (f"C{i + 1}", ex.polyline, {"length_km": round(ex.length_m / 1000, 2)})
             for i, ex in enumerate(exs)
         ]
+        try:
+            import pydeck as pdk
+
+            from pipeline_analytics.routing.export import to_wgs84
+
+            paths: list[dict[str, Any]] = [
+                {"name": name, "path": [list(p) for p in to_wgs84(coords, crs)],
+                 "color": list(_COLOURS[i % len(_COLOURS)])}
+                for i, (name, coords, _) in enumerate(items)
+            ]  # fmt: skip
+            lons = [p[0] for d in paths for p in d["path"]]
+            lats = [p[1] for d in paths for p in d["path"]]
+            st.pydeck_chart(
+                pdk.Deck(
+                    layers=[
+                        pdk.Layer(
+                            "PathLayer",
+                            paths,
+                            get_path="path",
+                            get_color="color",
+                            width_min_pixels=3,
+                            pickable=True,
+                        )
+                    ],
+                    initial_view_state=pdk.ViewState(
+                        longitude=sum(lons) / len(lons), latitude=sum(lats) / len(lats), zoom=9
+                    ),
+                    tooltip={"text": "{name}"},
+                ),
+                key="route_map",
+            )
+            st.caption("Corridors on a real basemap (synthetic sample area near 73.1 E, 22.6 N).")
+        except ImportError:
+            st.info("Install the 'gis' extra (pyproj) for the map view.")
         d1, d2 = st.columns(2)
         d1.download_button("Download GeoJSON", to_geojson(items, crs), "corridors.geojson")
         try:
@@ -748,3 +821,14 @@ with bot_tab:
                     )
                 st.chat_message("assistant").markdown(answer)
                 st.session_state.chat.append(("assistant", answer))
+        files = bot.study.last_report_files if st.session_state.get("bot") else {}
+        if files:
+            cols = st.columns(len(files))
+            for col, (kind, fpath) in zip(cols, sorted(files.items()), strict=True):
+                with open(fpath, "rb") as fh:
+                    col.download_button(
+                        f"Download {kind.upper()} report",
+                        fh.read(),
+                        fpath.rsplit("/", 1)[-1],
+                        key=f"bot_{kind}",
+                    )

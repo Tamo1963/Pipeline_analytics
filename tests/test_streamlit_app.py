@@ -97,3 +97,11 @@ def test_bot_tab_explains_missing_credentials(monkeypatch: pytest.MonkeyPatch) -
     at.chat_input(key="bot_input").set_value("Wall for 24 inch X70 at 92 barg?").run()
     assert not at.exception
     assert any("Claude API call failed" in e.value for e in at.error)
+
+
+def test_report_downloads_and_route_map() -> None:
+    at = AppTest.from_file(str(APP), default_timeout=120).run()
+    assert not at.exception
+    labels = [d.proto.label for d in at.get("download_button")]
+    assert "Download report (Word)" in labels and "Download workbook (Excel)" in labels
+    assert len(at.get("deck_gl_json_chart")) == 1  # corridor map

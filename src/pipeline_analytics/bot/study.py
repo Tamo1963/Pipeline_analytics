@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -72,6 +73,12 @@ class Study:
     tree: ScenarioTree = field(default_factory=ScenarioTree)
     assumptions: dict[str, str] = field(default_factory=dict)
     last_best: dict[str, Any] | None = None
+    last_search: Any = None
+    """The last optimiser DesignSearch (feeds generate_report)."""
+    sensitivity_rows: list[Any] = field(default_factory=list)
+    """SensitivityRow objects from the last run_sensitivity call."""
+    report_dir: Path = field(default_factory=lambda: Path("reports_out"))
+    last_report_files: dict[str, str] = field(default_factory=dict)
 
     # ------------------------------------------------------------------ build
     def require(self) -> tuple[DesignBasis, Alignment]:

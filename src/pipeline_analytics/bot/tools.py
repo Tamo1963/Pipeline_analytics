@@ -22,6 +22,7 @@ from pipeline_analytics.mechanical.common import PipeSection
 from pipeline_analytics.mechanical.pressure import LocationClass, pressure_design
 from pipeline_analytics.optimiser import Alignment, DesignSpace, Leg, Town, optimise_design
 from pipeline_analytics.pipespec import WtPolicy, default_library
+from pipeline_analytics.reports.model import SensitivityRow
 
 # ----------------------------------------------------------------- inputs
 
@@ -115,6 +116,17 @@ class SensitivityInput(_In):
 
 class EmptyInput(_In):
     pass
+
+
+def _both() -> list[Literal["docx", "xlsx"]]:
+    return ["docx", "xlsx"]
+
+
+class GenerateReportInput(_In):
+    title: str = Field(min_length=3, description="report title, e.g. the project name")
+    subtitle: str = ""
+    compare_nps: str | None = Field(default=None, description="a proposed size to compare, e.g. 30")
+    formats: list[Literal["docx", "xlsx"]] = Field(default_factory=lambda: _both())
 
 
 # --------------------------------------------------------------- handlers
@@ -254,6 +266,7 @@ def run_design_search(study: Study, a: DesignSearchInput) -> dict[str, Any]:
     ]
     best = study.summary(s.best, s.best_input)
     study.last_best = best
+    study.last_search = s
     return {
         "evaluations": len(s.evaluated),
         "best": best,
@@ -282,6 +295,7 @@ def run_sensitivity(study: Study, a: SensitivityInput) -> dict[str, Any]:
     b, al = study.require()
     space = _space(study, a.sizes, ["X65", "X70"])
     rows = []
+    sens_rows: list[SensitivityRow] = []
     for c in a.cases:
         basis = b
         upd: dict[str, Any] = {}
@@ -320,6 +334,17 @@ def run_sensitivity(study: Study, a: SensitivityInput) -> dict[str, Any]:
                     "premium_over_best_pct": round((r.lcc_pv / s.best.lcc_pv - 1) * 100, 1),
                 }
         rows.append(row)
+        cmp_row = row.get("compare", {})
+        sens_rows.append(
+            SensitivityRow(
+                case=c.name,
+                best=f'{s.best.nps}" {s.best.grade}',
+                lcc=study.usd_m(s.best.lcc_pv),
+                compare_lcc=cmp_row.get("lifecycle_cost_pv_usd_m"),
+                compare_premium_pct=cmp_row.get("premium_over_best_pct"),
+            )
+        )
+    study.sensitivity_rows = sens_rows
     return {"cases": rows, "disclosures": study.disclosures()}
 
 
@@ -340,6 +365,63 @@ def _scale_capital(rates: Any, k: float) -> Any:
         d["stations"][f] *= k
     d["per_km"] = {c: v * k for c, v in d["per_km"].items()}
     return UnitRates.model_validate(d)
+
+
+def _report_inputs(study: Study) -> list[tuple[str, str]]:
+    b, al = study.require()
+    unit = "MMSCFD" if b.service == "gas" else "MMTPA"
+    plateau = b.throughput_plateau or b.throughput_start
+    out = [
+        ("Service / jurisdiction", f"{b.service}, {b.jurisdiction}"),
+        ("Throughput", f"{b.throughput_start:g} -> {plateau:g} {unit} over {b.ramp_years} yr"),
+        ("Concession", f"{b.construction_years} yr build + {b.operating_years} yr operation"),
+        ("Discount rate (real)", f"{b.discount_rate:.1%}"),
+        ("MAOP options", ", ".join(f"{p:g} barg" for p in b.design_pressures_barg)),
+        ("Supply pressure", f"{b.supply_pressure_barg:g} barg"
+         + (f" falling to {b.supply_pressure_end_barg:g} barg"
+            if b.supply_pressure_end_barg is not None else "")),
+        ("Minimum delivery pressure", f"{b.delivery_min_barg:g} barg"),
+        ("Route", f"{al.name}: {al.length_m / 1000:g} km in {len(al.legs)} leg(s)"),
+        ("Wide-river HDD", f"{al.route_quantities().hdd_m:,.0f} m"),
+    ]  # fmt: skip
+    for o in al.offtakes():
+        out.append((f"Offtake {o.name or o.chainage_m / 1000}",
+                    f"{o.share:.0%} of flow at >= {o.min_pressure_pa_g / 1e5:g} barg"))  # fmt: skip
+    return out
+
+
+def generate_report(study: Study, a: GenerateReportInput) -> dict[str, Any]:
+    if study.last_search is None:
+        raise ValueError("no design search yet: call run_design_search first")
+    try:
+        from pipeline_analytics.reports.docx import write_docx
+        from pipeline_analytics.reports.model import Money, report_from_search
+        from pipeline_analytics.reports.xlsx import write_xlsx
+    except ImportError as e:  # pragma: no cover - extra not installed
+        raise ValueError(f"report writers unavailable (install the reports extra): {e}") from e
+    rate = study.basis.inr_per_usd if study.basis else 88.0
+    money = Money(per_inr=1 / (rate * 1e6), unit_per_inr=1 / rate,
+                  note=f"Converted at an assumed INR {rate:g} per US$.")  # fmt: skip
+    report = report_from_search(
+        study.last_search,
+        title=a.title,
+        subtitle=a.subtitle,
+        money=money,
+        compare_nps=a.compare_nps,
+        inputs=_report_inputs(study),
+        assumptions=[f"{k}: {v}" for k, v in study.assumptions.items()],
+        disclosures=study.disclosures()[: 1 if study.rates.placeholder else 0],
+        sensitivity=study.sensitivity_rows,
+        scenarios_evaluated=len(study.tree.results()),
+    )
+    slug = "".join(ch if ch.isalnum() else "_" for ch in a.title).strip("_")[:60] or "study"
+    files = {}
+    if "docx" in a.formats:
+        files["docx"] = str(write_docx(report, study.report_dir / f"{slug}.docx"))
+    if "xlsx" in a.formats:
+        files["xlsx"] = str(write_xlsx(report, study.report_dir / f"{slug}.xlsx"))
+    study.last_report_files = files
+    return {"files": files, "summary": report.summary, "disclosures": report.disclosures}
 
 
 def get_study(study: Study, a: EmptyInput) -> dict[str, Any]:
@@ -452,6 +534,16 @@ TOOLS: tuple[Tool, ...] = (
         ),
         SensitivityInput,
         run_sensitivity,
+    ),
+    Tool(
+        "generate_report",
+        (
+            "Write the study report from the last design search (and sensitivity, if run): a "
+            "Word report and an Excel workbook with inputs, method, results by size, CAPEX "
+            "build-up, yearly cash flow and sensitivity. Returns the file paths."
+        ),
+        GenerateReportInput,
+        generate_report,
     ),
     Tool(
         "get_study",
