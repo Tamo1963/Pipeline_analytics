@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pipeline-analytics"
+version = "0.1.0"
+description = "Cross-country pipeline feasibility suite: pipe specification library, engineering core and feasibility bot."
+readme = "README.md"
+license = "CC0-1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "pint>=0.24",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "scipy>=1.13",
+]
+
+[project.scripts]
+pipespec = "pipeline_analytics.pipespec.cli:main"
+pipeline-bot = "pipeline_analytics.bot.cli:main"
+pipeline-rates = "pipeline_analytics.cost.cli:main"
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.38", "pandas>=2.2"]
+gis = ["pyproj>=3.6"]
+bot = [
+    "anthropic>=2.5.0",
+]
+reports = ["python-docx>=1.1", "openpyxl>=3.1", "pillow>=10.1"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML>=6.0",
+    "pandas-stubs>=2.2",
+    "scipy-stubs>=1.14",
+    "types-openpyxl>=3.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipeline_analytics"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Markdown report templates: table rows cannot be wrapped
+"studies/**/make_report.py" = ["E501"]
+# HTML page template: long markup lines and typographic dashes are intended
+"studies/**/make_html.py" = ["E501", "RUF001"]
+"studies/**/make_docs.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests", "apps", "studies"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["pint.*", "pydeck.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src"]
+addopts = "-ra --strict-markers --doctest-modules"
