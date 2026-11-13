@@ -116,7 +116,7 @@ def test_bot_tab_explains_missing_credentials(monkeypatch: pytest.MonkeyPatch) -
     assert not at.exception
     at.chat_input(key="bot_input").set_value("Wall for 24 inch X70 at 92 barg?").run()
     assert not at.exception
-    assert any("Claude API call failed" in e.value for e in at.error)
+    assert any("model call failed" in e.value for e in at.error)
 
 
 def test_report_downloads_and_route_map() -> None:
@@ -195,3 +195,22 @@ def test_mechanical_liquefaction_panel() -> None:
     lpi = next(m for m in at.metric if m.label == "LPI")
     assert float(lpi.value) > 0
     assert any(m.label == "HDD setback needed" for m in at.metric)
+
+
+def test_wiki_tab_write_search_and_bot_uploader(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PIPELINE_WIKI_DIR", str(tmp_path))
+    at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert at.get("file_uploader")  # bot attachments + wiki uploads
+    at.text_input(key="w_new_title").set_value("HDD practice").run()
+    at.text_area(key="w_new_text").set_value("Entry angle 8-12 deg at wide rivers.").run()
+    at.button(key="w_save").click().run()
+    assert any("Saved article" in s.value for s in at.success)
+    at.text_input(key="w_q").set_value("entry angle rivers").run()
+    frames = [d.value for d in at.dataframe]
+    assert any("HDD practice" in str(getattr(f, "values", "")) for f in frames)
+    from pipeline_analytics.wiki import WikiStore
+
+    assert WikiStore(tmp_path / "pipeline_wiki.db").count() == 1

@@ -34,6 +34,7 @@ It also runs in the Streamlit app's **Feasibility bot** tab. Without credentials
 
 | Tool | What it does |
 |---|---|
+| `search_wiki` | Full-text search of the pipeline wiki (uploaded documents and articles), or read one article (`docs/bot.md` §Wiki) |
 | `lookup_pipe` | Grade strengths (API 5L / ISO 3183), size OD, designated walls, weights, processes |
 | `pipe_wall_thickness` | Pressure design (B31.8 / B31.4 with OISD / T4S / Bangladesh factors), orderable wall |
 | `reserve_life` | Years a reserve supports a rate, with and without other users |
@@ -70,3 +71,37 @@ uv run python -m pipeline_analytics.bot.evaluate
 This calls the Claude API and costs money. The full studies run the optimiser (1–3 minutes each).
 
 **Status:** the loop, tools, guardrail and scoring are tested offline with a scripted client. The live benchmark has **not been run yet**, because this build environment has no Claude API credentials.
+
+
+## Choosing the LLM (provider adapters)
+
+The tool loop and the number guardrail are provider-agnostic (`bot/providers.py`); the engine's results never depend on the model. Select the provider with environment variables and restart:
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `PIPELINE_BOT_PROVIDER` | `anthropic` or `openai` (any OpenAI-compatible endpoint) | `anthropic` |
+| `PIPELINE_BOT_MODEL` | model name | `claude-opus-5-5`; required for `openai` |
+| `PIPELINE_BOT_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
+| `PIPELINE_BOT_API_KEY` | key for that endpoint (falls back to `OPENAI_API_KEY`; empty is fine for a local Ollama) | - |
+| `PIPELINE_BOT_TOKENS_PARAM` | `max_tokens` or `max_completion_tokens` (OpenAI reasoning models) | `max_tokens` |
+| `PIPELINE_BOT_REASONING_EFFORT` | sent as `reasoning_effort` when set | - |
+
+Examples: Ollama locally - `PIPELINE_BOT_PROVIDER=openai PIPELINE_BOT_MODEL=llama3.1:70b PIPELINE_BOT_BASE_URL=http://localhost:11434/v1`. The Anthropic default keeps adaptive thinking, `effort=high`, server-side refusal fallback and the cached system prompt. The 30-case benchmark (`bot/evaluate.py`) was written against Claude; re-run it after switching providers.
+
+## File attachments
+
+The bot tab (and `FeasibilityBot.ask(text, attachments=...)`) takes uploads, parsed by `bot/uploads.py`:
+
+| Type | Handling |
+|---|---|
+| PDF | text extraction per page (scanned PDFs yield a note, no OCR) |
+| DOCX | paragraphs and tables |
+| PNG/JPG/GIF/WebP | sent to the model as an image (≤ 4.5 MB) |
+| KML / KMZ | placemark summary: paths with great-circle lengths and end coordinates, points, polygons - a drawn route can seed `define_route` |
+| TXT / MD / CSV | as text |
+
+Extracted text counts as a guardrail source, so figures quoted from an attached document are accepted. Long files are cut at 60,000 characters with an explicit note.
+
+## Pipeline wiki
+
+A knowledgebase in one SQLite file (`wiki/store.py`; FTS5 full-text index, `$PIPELINE_WIKI_DIR/pipeline_wiki.db`, default `./wiki/`). The app's **Wiki** tab uploads documents (the same parsers as above), writes and edits articles, and searches; the bot reads the same database through `search_wiki`. See ADR 0011.

@@ -234,6 +234,12 @@ class LiquefactionInput(_In):
     hdd_transition_m: float = Field(default=0.0, ge=0)
 
 
+class WikiInput(_In):
+    query: str | None = Field(default=None, description="full-text search terms")
+    article_id: int | None = Field(default=None, ge=1, description="read one article in full")
+    max_results: int = Field(default=5, ge=1, le=20)
+
+
 class EmptyInput(_In):
     pass
 
@@ -450,6 +456,35 @@ def liquefaction_check(study: Study, a: LiquefactionInput) -> dict[str, Any]:
             "concrete_coating_to_hold_down_mm": round(f.required_concrete_mm),
         }
     return out
+
+
+def search_wiki(study: Study, a: WikiInput) -> dict[str, Any]:
+    from pipeline_analytics.wiki import WikiStore, default_db
+
+    if (a.query is None) == (a.article_id is None):
+        raise ValueError("give either query or article_id")
+    db = default_db()
+    if not db.exists():
+        return {"articles": 0, "note": "the pipeline wiki is empty: nothing has been "
+                "uploaded in the Wiki tab yet"}  # fmt: skip
+    store = WikiStore(db)
+    if a.article_id is not None:
+        art = store.get(a.article_id)
+        text = art.content
+        if len(text) > 8000:
+            text = text[:8000] + f"\n\n[truncated at 8,000 of {len(art.content):,} characters]"
+        return {"id": art.id, "title": art.title, "tags": art.tags, "source": art.source,
+                "content": text}  # fmt: skip
+    hits = store.search(a.query or "", limit=a.max_results)
+    return {
+        "articles": store.count(),
+        "matches": [
+            {"id": h.id, "title": h.title, "tags": h.tags, "snippet": h.snippet} for h in hits
+        ],
+        "note": "call again with article_id to read a match in full"
+        if hits
+        else "no match: try different terms",
+    }
 
 
 def reserve_life(study: Study, a: ReserveLifeInput) -> dict[str, Any]:
@@ -882,6 +917,17 @@ TOOLS: tuple[Tool, ...] = (
         ),
         LiquefactionInput,
         liquefaction_check,
+    ),
+    Tool(
+        "search_wiki",
+        (
+            "Search the project's pipeline wiki (the knowledgebase of uploaded standards "
+            "notes, project documents and articles) by full text, or read one article by id. "
+            "Use it when the user refers to project documents, company practice or earlier "
+            "notes. Quote the article title when using its content."
+        ),
+        WikiInput,
+        search_wiki,
     ),
     Tool(
         "reserve_life",

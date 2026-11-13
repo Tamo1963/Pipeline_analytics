@@ -12,5 +12,6 @@
 | [0008](0008-feasibility-bot.md) | Feasibility bot: tool-calling agent with a number guardrail | Accepted |
 | [0009](0009-monte-carlo-and-projects.md) | Monte Carlo by exact linearisation; file-based project store | Accepted |
 | [0010](0010-pipe-soil-fe-model.md) | Pipe-soil FE model: moderate-rotation beam on ALA springs | Accepted |
+| [0011](0011-llm-agnostic-bot-and-wiki.md) | LLM-agnostic bot (provider adapters) and a SQLite pipeline wiki | Accepted |
 
 New ADRs: copy the format (Context / Decision / Consequences), number sequentially.

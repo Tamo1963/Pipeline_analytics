@@ -21,6 +21,7 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 6 | Feasibility bot (Claude agent over the engine tools, number guardrail): see [`docs/bot.md`](docs/bot.md) | ✅ built; live benchmark pending credentials |
 | 7 | Reports & UI: Word/Excel study reports, chat-to-report, map view: see [`docs/reports.md`](docs/reports.md) | ✅ done |
 | 8 | Hardening: Monte Carlo risk, project unit-rate sets (`pipeline-rates`), multi-user projects with sign-in: see [`docs/hardening.md`](docs/hardening.md) | ✅ done |
+| 9 | LLM-agnostic bot (Anthropic or any OpenAI-compatible endpoint), file attachments (PDF/DOCX/images/KMZ), pipeline wiki (SQLite + FTS): see [`docs/bot.md`](docs/bot.md) | ✅ done |
 
 ## Development
 
@@ -57,10 +58,11 @@ src/pipeline_analytics/
   economics/    concession cash flows, LCC, tariff, IRR, sensitivity, Monte Carlo risk, economic-diameter curve
   routing/      AOI layers, cost surface, least-cost path, alternatives, extraction, GeoJSON/KML
   optimiser/    design search, route iteration, scenario tree, fixed-alignment studies
-  bot/          feasibility bot: Claude agent, tools, guardrail, benchmark (`pipeline-bot`)
+  bot/          feasibility bot: LLM-agnostic agent (Claude default), tools, guardrail, uploads, benchmark (`pipeline-bot`)
   reports/      study report model; Word report and Excel workbook writers
   projects/     multi-user project store: owners, sharing, append-only versions
   geotech/      liquefaction triggering (Idriss & Boulanger), lateral spread (Youd 2002), pipe checks
+  wiki/         pipeline wiki: SQLite knowledgebase with full-text search (app tab + bot tool)
   api/          FastAPI service layer (planned)
 apps/streamlit/ UI
 studies/       worked studies (Bhola - Khulna test case)

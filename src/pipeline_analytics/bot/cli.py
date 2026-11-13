@@ -14,9 +14,12 @@ def main() -> int:
     try:
         bot = FeasibilityBot(on_tool=lambda name, _: print(f"  [running {name}]", flush=True))
     except Exception as e:  # pragma: no cover - credential problems surface here
-        print(f"Could not start the Claude client: {e}", file=sys.stderr)
+        print(f"Could not start the LLM client: {e}", file=sys.stderr)
         return 1
-    print("Pipeline feasibility bot. Describe your project; 'exit' to quit.\n")
+    from pipeline_analytics.bot.providers import provider_label
+
+    print(f"Pipeline feasibility bot [{provider_label()}]. "
+          "Describe your project; 'exit' to quit.\n")  # fmt: skip
     while True:
         try:
             text = input("you> ").strip()
@@ -30,7 +33,11 @@ def main() -> int:
         try:
             reply = bot.ask(text)
         except Exception as e:  # pragma: no cover - credentials, network, rate limits
-            print(f"Claude API call failed: {e}\nSet ANTHROPIC_API_KEY or run `ant auth login`.")
+            print(
+                f"Model call failed: {e}\n"
+                "Anthropic (default): set ANTHROPIC_API_KEY or run `ant auth login`. "
+                "Other providers: set PIPELINE_BOT_PROVIDER/MODEL/BASE_URL/API_KEY."
+            )
             continue
         print(f"\nbot> {reply.text}\n")
         if reply.unsupported:

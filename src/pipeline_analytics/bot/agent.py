@@ -1,12 +1,13 @@
-"""Feasibility Specialist Bot: a Claude agent over the engine's tools.
+"""Feasibility Specialist Bot: an LLM agent over the engine's tools.
 
-Manual tool loop on the Messages API (not the beta tool runner) so that every
-tool input is validated against the engine's own Pydantic models, and so the
-final answer can be checked against the numbers the tools returned.
-
-Model and request defaults: Claude Opus 5.5 with adaptive thinking at
-``effort="high"``; server-side refusal fallback (``fallbacks="default"``) is
-enabled; the system prompt and tool list are cached.
+Manual tool loop (not a vendor tool runner) so that every tool input is
+validated against the engine's own Pydantic models, and so the final answer
+can be checked against the numbers the tools returned. The loop is
+provider-agnostic: it works on content blocks, and a ``providers`` adapter
+translates to each LLM's wire format (see ``bot/providers.py``). The default
+is Claude Opus 5.5 through the Anthropic SDK (adaptive thinking at
+``effort="high"``, server-side refusal fallback, cached system prompt); any
+OpenAI-compatible endpoint is selected with ``PIPELINE_BOT_PROVIDER=openai``.
 
 Guardrail: every figure in a final answer must appear in a tool result or in
 the user's own messages (allowing for rounding). If not, the bot is asked once
@@ -17,15 +18,21 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from pipeline_analytics.bot.providers import (
+    DEFAULT_ANTHROPIC_MODEL,
+    AnthropicProvider,
+    Provider,
+    provider_from_env,
+)
 from pipeline_analytics.bot.study import Study
 from pipeline_analytics.bot.tools import TOOLS, run_tool
+from pipeline_analytics.bot.uploads import Upload, upload_blocks
 
-MODEL = "claude-opus-5-5"
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
+MODEL = DEFAULT_ANTHROPIC_MODEL
 
 SYSTEM_PROMPT = """You are a pipeline feasibility engineer for cross-country gas and liquid \
 pipelines. You run screening-level viability studies whose goal is the lowest lifecycle cost: \
@@ -109,17 +116,19 @@ class FeasibilityBot:
         self,
         client: Any | None = None,
         *,
-        model: str = MODEL,
+        provider: Provider | None = None,
+        model: str = "",
         effort: str = "high",
         max_tool_rounds: int = 12,
         on_tool: Callable[[str, dict[str, Any]], None] | None = None,
     ) -> None:
-        if client is None:
-            import anthropic  # optional dependency: the 'bot' extra
-
-            client = anthropic.Anthropic()
-        self.client: Any = client
-        self.model = model
+        """``provider`` selects the LLM (default: from the environment, see
+        ``bot/providers.py``). ``client`` is a shortcut for an Anthropic(-style)
+        client, kept for scripted tests and existing callers."""
+        if provider is None:
+            provider = AnthropicProvider(client) if client is not None else provider_from_env()
+        self.provider: Provider = provider
+        self.model = model or provider.default_model
         self.effort = effort
         self.max_tool_rounds = max_tool_rounds
         self.on_tool = on_tool
@@ -129,19 +138,10 @@ class FeasibilityBot:
         self.tools = [t.definition() for t in TOOLS]
 
     def _create(self) -> Any:
-        return self.client.beta.messages.create(
-            model=self.model,
-            max_tokens=16000,
-            system=[
-                {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}
-            ],
-            tools=self.tools,
-            messages=self.messages,
-            thinking={"type": "adaptive"},
-            output_config={"effort": self.effort},
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
-        )
+        return self.provider.create(
+            model=self.model, system=SYSTEM_PROMPT, tools=self.tools,
+            messages=self.messages, effort=self.effort,
+        )  # fmt: skip
 
     def _turn(self, reply: Reply) -> Any:
         """Run the tool loop until the model ends its turn."""
@@ -181,10 +181,16 @@ class FeasibilityBot:
             b.text for b in response.content if getattr(b, "type", None) == "text"
         ).strip()
 
-    def ask(self, user_text: str) -> Reply:
-        """Send one user message; returns the bot's checked answer."""
-        self.messages.append({"role": "user", "content": user_text})
+    def ask(self, user_text: str, attachments: Sequence[Upload] = ()) -> Reply:
+        """Send one user message (optionally with parsed file uploads); returns
+        the bot's checked answer. Attachment text counts as a source for the
+        number guardrail, like the user's own words."""
+        content: Any = user_text
+        if attachments:
+            content = [{"type": "text", "text": user_text}, *upload_blocks(attachments)]
+        self.messages.append({"role": "user", "content": content})
         self.sources.append(user_text)
+        self.sources.extend(u.text for u in attachments if u.text)
         reply = Reply(text="")
         response = self._turn(reply)
         if reply.stop_reason == "refusal":

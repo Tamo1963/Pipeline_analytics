@@ -77,17 +77,20 @@ st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
-bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab, proj_tab = st.tabs(
-    [
-        "Feasibility bot",
-        "Study basis",
-        "Pipe library",
-        "Mechanical (ALA)",
-        "Class location & hydraulics",
-        "Economics",
-        "Route",
-        "Projects",
-    ]
+bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab, proj_tab, wiki_tab = (
+    st.tabs(
+        [
+            "Feasibility bot",
+            "Study basis",
+            "Pipe library",
+            "Mechanical (ALA)",
+            "Class location & hydraulics",
+            "Economics",
+            "Route",
+            "Projects",
+            "Wiki",
+        ]
+    )
 )
 
 
@@ -1213,11 +1216,22 @@ with route_tab:
 
 # ------------------------------------------------------------ feasibility bot
 with bot_tab:
+    from pipeline_analytics.bot.providers import provider_label
+    from pipeline_analytics.bot.uploads import parse_upload
+
     st.caption(
         "Describe your project in plain language: fluid, flow, route legs, pressures, concession. "
         "The bot runs the engine's tools and answers only with figures they return; each answer "
-        "is checked for numbers that no tool produced."
+        f"is checked for numbers that no tool produced. Model: {provider_label()} "
+        "(set PIPELINE_BOT_PROVIDER / MODEL / BASE_URL / API_KEY for another LLM)."
     )
+    bot_files = st.file_uploader(
+        "Attach files to your next message (PDF, DOCX, image, KML/KMZ map, text)",
+        type=["pdf", "docx", "png", "jpg", "jpeg", "gif", "webp", "kml", "kmz", "txt",
+              "md", "csv"],
+        accept_multiple_files=True,
+        key="bot_files",
+    )  # fmt: skip
     if "bot" not in st.session_state:
         try:
             from pipeline_analytics.bot import FeasibilityBot
@@ -1230,8 +1244,10 @@ with bot_tab:
     bot = st.session_state.bot
     if bot is None:
         st.info(
-            "The bot needs the 'bot' extra and Claude API credentials: set ANTHROPIC_API_KEY "
-            "(or sign in with `ant auth login`) and restart the app. "
+            "The bot needs the 'bot' extra and model credentials. Claude (default): set "
+            "ANTHROPIC_API_KEY or sign in with `ant auth login`. Any OpenAI-compatible "
+            "endpoint: set PIPELINE_BOT_PROVIDER=openai, PIPELINE_BOT_MODEL, "
+            "PIPELINE_BOT_BASE_URL and PIPELINE_BOT_API_KEY. Then restart the app. "
             f"Details: {st.session_state.get('bot_error', '')}"
         )
     else:
@@ -1239,15 +1255,24 @@ with bot_tab:
             st.chat_message(role).markdown(msg)
         prompt = st.chat_input("Ask about your pipeline project", key="bot_input")
         if prompt:
-            st.chat_message("user").markdown(prompt)
-            st.session_state.chat.append(("user", prompt))
+            sent: set[str] = st.session_state.setdefault("bot_files_sent", set())
+            atts = []
+            for f in bot_files or []:
+                tag = f"{f.name}:{f.size}"
+                if tag not in sent:
+                    atts.append(parse_upload(f.name, f.getvalue()))
+                    sent.add(tag)
+            shown = prompt + ("\n\n" + "\n".join(f"- {u.summary}" for u in atts) if atts else "")
+            st.chat_message("user").markdown(shown)
+            st.session_state.chat.append(("user", shown))
             try:
                 with st.spinner("Working: running the engine..."):
-                    reply = bot.ask(prompt)
+                    reply = bot.ask(prompt, attachments=atts)
             except Exception as e:  # credentials, network, rate limits
                 st.error(
-                    "The Claude API call failed. If no credentials are set, set "
-                    f"ANTHROPIC_API_KEY or sign in with `ant auth login`, then restart. ({e})"
+                    "The model call failed. Claude (default): set ANTHROPIC_API_KEY or sign "
+                    "in with `ant auth login`. Other providers: check PIPELINE_BOT_BASE_URL "
+                    f"and PIPELINE_BOT_API_KEY. Then restart. ({e})"
                 )
                 st.session_state.pop("bot")
             else:
@@ -1434,3 +1459,90 @@ with proj_tab:
                         if o2.button("Remove", key=f"p_unshare_{other}"):
                             store.unshare(pid, user, other)
                             st.rerun()
+
+
+# ----------------------------------------------------------------------- wiki
+with wiki_tab:
+    from pipeline_analytics.bot.uploads import parse_upload as _wiki_parse
+    from pipeline_analytics.wiki import WikiStore, default_db
+
+    st.caption(
+        "The pipeline wiki is the project knowledgebase: upload standards notes, project "
+        "documents and lessons learned, or write articles. Everything is stored in a SQLite "
+        "database and is full-text searchable here and by the feasibility bot (search_wiki). "
+        f"Database: {default_db()} (set PIPELINE_WIKI_DIR to move it)."
+    )
+    wiki = WikiStore()
+    w_add, w_write = st.columns(2)
+    with w_add:
+        st.markdown("**Upload documents**")
+        w_files = st.file_uploader(
+            "PDF, DOCX, text or markdown; text is extracted and indexed",
+            type=["pdf", "docx", "txt", "md", "csv"],
+            accept_multiple_files=True,
+            key="w_files",
+        )
+        w_tags = st.text_input("Tags for these uploads (comma-separated)", key="w_tags")
+        if st.button("Add to wiki", key="w_add", disabled=not w_files):
+            added, failed = [], []
+            done: set[str] = st.session_state.setdefault("w_files_done", set())
+            for f in w_files or []:
+                tag = f"{f.name}:{f.size}"
+                if tag in done:
+                    continue
+                u = _wiki_parse(f.name, f.getvalue())
+                if u.ok and u.text.strip():
+                    title = f.name.rsplit(".", 1)[0].replace("_", " ").strip()
+                    wiki.add(title, u.text, tags=w_tags, source=f.name)
+                    added.append(f.name)
+                    done.add(tag)
+                else:
+                    failed.append(u.summary)
+            if added:
+                st.success(f"Added {len(added)} article(s): {', '.join(added)}")
+            for msg in failed:
+                st.error(msg)
+    with w_write:
+        st.markdown("**Write an article**")
+        a_title = st.text_input("Title", key="w_new_title")
+        a_tags = st.text_input("Tags (comma-separated)", key="w_new_tags")
+        a_text = st.text_area("Content (markdown)", height=160, key="w_new_text")
+        if st.button("Save article", key="w_save", disabled=not (a_title and a_text)):
+            art = wiki.add(a_title, a_text, tags=a_tags, source="written in app")
+            st.success(f"Saved article {art.id}: {art.title}")
+
+    st.divider()
+    n_articles = wiki.count()
+    st.markdown(f"**Search and browse** ({n_articles} article(s))")
+    w_q = st.text_input("Search the wiki", key="w_q")
+    if w_q.strip():
+        hits = wiki.search(w_q, limit=10)
+        if hits:
+            st.dataframe(
+                [{"id": h.id, "Title": h.title, "Tags": h.tags, "Match": h.snippet}
+                 for h in hits],
+                hide_index=True,
+            )  # fmt: skip
+        else:
+            st.info("No match.")
+    arts = wiki.list_articles(100)
+    if arts:
+        w_by_id = {a.id: a for a in arts}
+
+        def _w_label(i: int) -> str:
+            a = w_by_id[i]
+            return f"{a.title} ({a.tags})" if a.tags else a.title
+
+        pick = st.selectbox("Open an article", list(w_by_id), format_func=_w_label, key="w_pick")
+        art = wiki.get(int(pick or 0))
+        st.caption(f"Source: {art.source or '-'}; updated {art.updated_at}")
+        e_title = st.text_input("Title", value=art.title, key=f"w_et_{art.id}")
+        e_tags = st.text_input("Tags", value=art.tags, key=f"w_eg_{art.id}")
+        e_text = st.text_area("Content", value=art.content, height=260, key=f"w_ec_{art.id}")
+        c1, c2 = st.columns(2)
+        if c1.button("Save changes", key="w_update"):
+            wiki.update(art.id, title=e_title, content=e_text, tags=e_tags)
+            st.success("Saved.")
+        if c2.button("Delete article", key="w_delete"):
+            wiki.delete(art.id)
+            st.rerun()
