@@ -21,7 +21,7 @@ A suite of applications for **cross-country pipeline** feasibility and design. T
 | 6 | Feasibility bot (Claude agent over the engine tools, number guardrail): see [`docs/bot.md`](docs/bot.md) | ✅ built; live benchmark pending credentials |
 | 7 | Reports & UI: Word/Excel study reports, chat-to-report, map view: see [`docs/reports.md`](docs/reports.md) | ✅ done |
 | 8 | Hardening: Monte Carlo risk, project unit-rate sets (`pipeline-rates`), multi-user projects with sign-in: see [`docs/hardening.md`](docs/hardening.md) | ✅ done |
-| 9 | LLM-agnostic bot (Anthropic or any OpenAI-compatible endpoint), file attachments (PDF/DOCX/images/KMZ), pipeline wiki (SQLite + FTS): see [`docs/bot.md`](docs/bot.md) | ✅ done |
+| 9 | LLM-agnostic bot (OpenAI, OpenRouter, Groq, Ollama, Anthropic or any OpenAI-compatible server; key-first model lists in the sidebar), file attachments (PDF/DOCX/images/KMZ), pipeline wiki (SQLite + FTS): see [`docs/bot.md`](docs/bot.md) | ✅ done |
 
 ## Development
 

@@ -1,36 +1,38 @@
-"""LLM providers for the Feasibility Bot.
+"""LLM providers for the Feasibility Bot (LLM-agnostic).
 
-The bot's tool loop (``agent.py``) is provider-agnostic: it works on
-Anthropic-style *content blocks* (``text``, ``tool_use``, ``tool_result``,
-``image``), and each provider translates between that internal format and its
-wire format. Two providers are built in:
+The bot's tool loop (``agent.py``) works on Anthropic-style *content blocks*
+(``text``, ``tool_use``, ``tool_result``, ``image``); each provider translates
+between that internal format and its wire format:
 
-* :class:`AnthropicProvider` - Claude through the official ``anthropic`` SDK
-  (the default): adaptive thinking, ``effort``, server-side refusal fallback,
-  and a cached system prompt, exactly as before.
 * :class:`OpenAIChatProvider` - any OpenAI-compatible ``/chat/completions``
-  endpoint over plain HTTPS: OpenAI, Azure OpenAI (with a full base URL),
-  Groq, Together, Mistral, vLLM, Ollama (``http://localhost:11434/v1``), ...
+  endpoint over plain HTTPS: OpenAI, OpenRouter, Groq, Together, Mistral,
+  Ollama (cloud or local), vLLM, or a custom server.
+* :class:`AnthropicProvider` - Claude through the official ``anthropic`` SDK:
+  adaptive thinking, ``effort``, server-side refusal fallback, cached system
+  prompt.
 
-Selection is by environment (:func:`provider_from_env`):
+No provider is assumed. :data:`PRESETS` names the services the app offers;
+:func:`list_models` fetches the models an API key can use; and
+:func:`env_settings` reads the environment for the CLI and the app's
+starting values:
 
 ======================================  =============================================
-``PIPELINE_BOT_PROVIDER``               ``anthropic`` (default) or ``openai``
-``PIPELINE_BOT_MODEL``                  model name (default ``claude-opus-5-5``;
-                                        required for ``openai``)
-``PIPELINE_BOT_BASE_URL``               OpenAI-compatible base URL
-                                        (default ``https://api.openai.com/v1``)
-``PIPELINE_BOT_API_KEY``                key for that endpoint (falls back to
-                                        ``OPENAI_API_KEY``; empty is fine for Ollama)
+``PIPELINE_BOT_PROVIDER``               preset name or alias (``openrouter``,
+                                        ``groq``, ``ollama``, ``openai``,
+                                        ``anthropic``, ``custom``, ...); if unset,
+                                        the first preset whose key variable is set
+``PIPELINE_BOT_MODEL``                  model id
+``PIPELINE_BOT_BASE_URL``               overrides the preset's base URL
+``PIPELINE_BOT_API_KEY``                key (else the preset's own variable, e.g.
+                                        ``OPENROUTER_API_KEY``, ``GROQ_API_KEY``)
 ``PIPELINE_BOT_TOKENS_PARAM``           ``max_tokens`` (default) or
-                                        ``max_completion_tokens`` (OpenAI reasoning
-                                        models reject ``max_tokens``)
+                                        ``max_completion_tokens``
 ``PIPELINE_BOT_REASONING_EFFORT``       if set, sent as ``reasoning_effort``
 ======================================  =============================================
 
-Quality note: the bot's number guardrail and tool loop work with any provider,
-but the engine's tool descriptions and benchmark were written and tested
-against Claude. Re-run ``pipeline_analytics.bot.evaluate`` after switching.
+Quality note: the tool loop and the number guardrail work with any provider,
+but the bot's tool descriptions and benchmark were tested against Claude.
+Re-run ``pipeline_analytics.bot.evaluate`` after switching.
 """
 
 from __future__ import annotations
@@ -263,26 +265,116 @@ class OpenAIChatProvider:
         return self._response_in(self._post(payload))
 
 
-KNOWN_ENDPOINTS: dict[str, str] = {
-    "OpenAI": "https://api.openai.com/v1",
-    "Groq": "https://api.groq.com/openai/v1",
-    "Together": "https://api.together.xyz/v1",
-    "Mistral": "https://api.mistral.ai/v1",
-    "Ollama (local)": "http://localhost:11434/v1",
-    "vLLM (local)": "http://localhost:8000/v1",
-    "Custom": "",
-}
 ANTHROPIC_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")
-MODEL_SUGGESTIONS: dict[str, tuple[str, ...]] = {
-    "OpenAI": ("gpt-5.1", "gpt-5", "gpt-4.1"),
-    "Groq": ("llama-3.3-70b-versatile", "llama-3.1-8b-instant"),
-    "Together": ("meta-llama/Llama-3.3-70B-Instruct-Turbo",),
-    "Mistral": ("mistral-large-latest", "mistral-small-latest"),
-    "Ollama (local)": ("llama3.1", "qwen2.5", "mistral"),
-    "vLLM (local)": (),
-    "Custom": (),
-}
-"""Dropdown seeds for UIs; model names drift, so a custom entry is always offered."""
+
+
+@dataclass(frozen=True)
+class ProviderPreset:
+    """A named LLM service for the UI and the CLI."""
+
+    name: str
+    kind: str  # "anthropic" | "openai" (OpenAI-compatible chat completions)
+    base_url: str
+    needs_key: bool
+    key_env: str = ""
+    """Environment variable that may hold the key (read when the key box is empty)."""
+    suggestions: tuple[str, ...] = ()
+    """Shown only until the live model list has been fetched."""
+
+
+PRESETS: tuple[ProviderPreset, ...] = (
+    ProviderPreset("OpenAI", "openai", "https://api.openai.com/v1", True, "OPENAI_API_KEY",
+                   ("gpt-5.1", "gpt-5", "gpt-4.1")),
+    ProviderPreset("OpenRouter", "openai", "https://openrouter.ai/api/v1", True,
+                   "OPENROUTER_API_KEY"),
+    ProviderPreset("Groq", "openai", "https://api.groq.com/openai/v1", True, "GROQ_API_KEY",
+                   ("llama-3.3-70b-versatile",)),
+    ProviderPreset("Together", "openai", "https://api.together.xyz/v1", True,
+                   "TOGETHER_API_KEY"),
+    ProviderPreset("Mistral", "openai", "https://api.mistral.ai/v1", True, "MISTRAL_API_KEY",
+                   ("mistral-large-latest",)),
+    ProviderPreset("Ollama Cloud", "openai", "https://ollama.com/v1", True, "OLLAMA_API_KEY"),
+    ProviderPreset("Ollama (local)", "openai", "http://localhost:11434/v1", False, "",
+                   ("llama3.1", "qwen2.5")),
+    ProviderPreset("vLLM (local)", "openai", "http://localhost:8000/v1", False),
+    ProviderPreset("Anthropic (Claude)", "anthropic", "https://api.anthropic.com", True,
+                   "ANTHROPIC_API_KEY", ANTHROPIC_MODELS),
+    ProviderPreset("Custom (OpenAI-compatible)", "openai", "", False, "PIPELINE_BOT_API_KEY"),
+)  # fmt: skip
+PRESET_BY_NAME = {p.name: p for p in PRESETS}
+
+
+def preset_named(name: str) -> ProviderPreset | None:
+    """Look up a preset by its name or a short alias (``openrouter``, ``groq``, ...).
+
+    Exact names win, then the aliases below, then a unique first word.
+    """
+    key = name.strip().lower()
+    for p in PRESETS:
+        if key == p.name.lower():
+            return p
+    alias = {"claude": "Anthropic (Claude)", "anthropic": "Anthropic (Claude)",
+             "custom": "Custom (OpenAI-compatible)",
+             "openai-compatible": "Custom (OpenAI-compatible)",
+             "ollama": "Ollama (local)", "ollama-cloud": "Ollama Cloud",
+             "vllm": "vLLM (local)"}.get(key)  # fmt: skip
+    if alias:
+        return PRESET_BY_NAME[alias]
+    hits = [p for p in PRESETS if p.name.lower().split(" ")[0] == key]
+    return hits[0] if len(hits) == 1 else None
+
+
+def env_key(preset: ProviderPreset) -> str:
+    return os.environ.get(preset.key_env, "").strip() if preset.key_env else ""
+
+
+def _get_json(url: str, api_key: str, timeout_s: float) -> Any:
+    import httpx
+
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    r = httpx.get(url, headers=headers, timeout=timeout_s)
+    if r.status_code in (401, 403):
+        raise PermissionError(f"the API key was rejected ({r.status_code})")
+    if r.status_code >= 400:
+        raise RuntimeError(f"{url} returned {r.status_code}: {r.text[:300]}")
+    return r.json()
+
+
+def list_models(
+    kind: str,
+    base_url: str = "",
+    api_key: str = "",
+    *,
+    timeout_s: float = 15.0,
+    fetch: Callable[[str, str, float], Any] | None = None,
+) -> list[str]:
+    """The model ids a provider offers to this API key (sorted).
+
+    OpenAI-compatible services (OpenAI, OpenRouter, Groq, Together, Mistral,
+    Ollama, vLLM) answer ``GET {base_url}/models`` with ``{"data": [{"id": ...}]}``;
+    Anthropic is listed through its SDK. Raises ``PermissionError`` for a
+    rejected key and ``RuntimeError`` / ``httpx`` errors for other failures.
+    """
+    kind = kind.strip().lower()
+    if kind == "anthropic" and fetch is None:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=api_key or None)
+        try:
+            return sorted(m.id for m in client.models.list())
+        except anthropic.AuthenticationError as e:
+            raise PermissionError("the API key was rejected (401)") from e
+    if not base_url:
+        raise ValueError("enter the endpoint's base URL first")
+    url = base_url.rstrip("/") + "/models"
+    data = (fetch or _get_json)(url, api_key, timeout_s)
+    items = data.get("data", data.get("models", [])) if isinstance(data, dict) else data
+    ids = []
+    for it in items or []:
+        mid = it.get("id") or it.get("name") if isinstance(it, dict) else it
+        if mid:
+            ids.append(str(mid))
+    return sorted(set(ids))
 
 
 def make_provider(
@@ -290,7 +382,7 @@ def make_provider(
 ) -> AnthropicProvider | OpenAIChatProvider:
     """Build a provider from plain settings (what the app's sidebar collects)."""
     kind = kind.strip().lower()
-    if kind in ("anthropic", "claude", ""):
+    if kind in ("anthropic", "claude"):
         client = None
         if api_key.strip():
             import anthropic
@@ -299,41 +391,67 @@ def make_provider(
         return AnthropicProvider(client, default_model=model or DEFAULT_ANTHROPIC_MODEL)
     if kind in ("openai", "openai-compatible", "openai_compatible"):
         if not model.strip():
-            raise ValueError("an OpenAI-compatible endpoint needs a model name")
+            raise ValueError("choose a model")
+        if not base_url.strip():
+            raise ValueError("enter the endpoint's base URL")
         return OpenAIChatProvider(
             model=model.strip(),
-            base_url=(base_url or "https://api.openai.com/v1").strip(),
+            base_url=base_url.strip(),
             api_key=api_key.strip(),
             tokens_param=os.environ.get("PIPELINE_BOT_TOKENS_PARAM", "max_tokens"),
             reasoning_effort=os.environ.get("PIPELINE_BOT_REASONING_EFFORT", ""),
         )
-    raise ValueError(f"unknown provider {kind!r}: use 'anthropic' or 'openai'")
+    raise ValueError(f"unknown provider kind {kind!r}: use 'anthropic' or 'openai'")
+
+
+def env_settings() -> tuple[ProviderPreset, str, str, str] | None:
+    """(preset, model, base_url, api_key) from the environment, or None if nothing is set.
+
+    ``PIPELINE_BOT_PROVIDER`` names a preset (``openrouter``, ``groq``, ``ollama``,
+    ``anthropic``, ``custom``, ...) or ``openai`` for any OpenAI-compatible endpoint;
+    if it is unset, the first preset whose key variable is set is used. No
+    provider is assumed: with nothing configured this returns None.
+    """
+    name = os.environ.get("PIPELINE_BOT_PROVIDER", "").strip()
+    preset = preset_named(name) if name else None
+    if name and preset is None:
+        raise ValueError(f"unknown PIPELINE_BOT_PROVIDER {name!r}; use one of: "
+                         + ", ".join(p.name for p in PRESETS))  # fmt: skip
+    if preset is None:
+        preset = next((p for p in PRESETS if p.needs_key and env_key(p)), None)
+    if preset is None:
+        return None
+    base = os.environ.get("PIPELINE_BOT_BASE_URL", "").strip() or preset.base_url
+    key = os.environ.get("PIPELINE_BOT_API_KEY", "").strip() or env_key(preset)
+    model = os.environ.get("PIPELINE_BOT_MODEL", "").strip()
+    if not model and preset.kind == "anthropic":
+        model = DEFAULT_ANTHROPIC_MODEL
+    return preset, model, base, key
 
 
 def provider_from_env() -> AnthropicProvider | OpenAIChatProvider:
-    """The provider the environment selects (see the module docstring)."""
-    kind = os.environ.get("PIPELINE_BOT_PROVIDER", "anthropic").strip().lower()
-    model = os.environ.get("PIPELINE_BOT_MODEL", "").strip()
-    if kind in ("anthropic", "claude", ""):
-        return AnthropicProvider(default_model=model or DEFAULT_ANTHROPIC_MODEL)
-    if kind in ("openai", "openai-compatible", "openai_compatible"):
-        if not model:
-            raise ValueError("PIPELINE_BOT_PROVIDER=openai needs PIPELINE_BOT_MODEL")
-        return make_provider(
-            "openai",
-            model=model,
-            base_url=os.environ.get("PIPELINE_BOT_BASE_URL", "https://api.openai.com/v1"),
-            api_key=os.environ.get("PIPELINE_BOT_API_KEY", "")
-            or os.environ.get("OPENAI_API_KEY", ""),
+    """The provider the environment selects (see :func:`env_settings`)."""
+    st = env_settings()
+    if st is None:
+        raise ValueError(
+            "no LLM provider configured: set PIPELINE_BOT_PROVIDER (e.g. openrouter, groq, "
+            "ollama, openai, anthropic, custom), PIPELINE_BOT_MODEL and the provider's API "
+            "key (PIPELINE_BOT_API_KEY or e.g. OPENROUTER_API_KEY)"
         )
-    raise ValueError(f"unknown PIPELINE_BOT_PROVIDER {kind!r}: use 'anthropic' or 'openai'")
+    preset, model, base, key = st
+    if preset.needs_key and preset.kind == "openai" and not key:
+        raise ValueError(f"{preset.name} needs an API key ({preset.key_env} or "
+                         "PIPELINE_BOT_API_KEY)")  # fmt: skip
+    return make_provider(preset.kind, model=model, base_url=base, api_key=key)
 
 
 def provider_label() -> str:
     """For UIs: which provider/model the environment selects, without connecting."""
-    kind = os.environ.get("PIPELINE_BOT_PROVIDER", "anthropic").strip().lower() or "anthropic"
-    model = os.environ.get("PIPELINE_BOT_MODEL", "").strip()
-    if kind in ("anthropic", "claude"):
-        return f"Claude ({model or DEFAULT_ANTHROPIC_MODEL})"
-    base = os.environ.get("PIPELINE_BOT_BASE_URL", "https://api.openai.com/v1")
-    return f"{model or '?'} via {base}"
+    try:
+        st = env_settings()
+    except ValueError as e:
+        return str(e)
+    if st is None:
+        return "no provider configured"
+    preset, model, _base, _key = st
+    return f"{preset.name}: {model or '(choose a model)'}"

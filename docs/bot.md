@@ -75,22 +75,37 @@ This calls the Claude API and costs money. The full studies run the optimiser (1
 
 ## Choosing the LLM (provider adapters)
 
-The tool loop and the number guardrail are provider-agnostic (`bot/providers.py`); the engine's results never depend on the model.
+The bot works with any LLM; none is assumed or required. The tool loop and the number guardrail are provider-agnostic (`bot/providers.py`), and the engine's results never depend on the model.
 
-**In the app:** the left sidebar has **Provider** (Anthropic or OpenAI-compatible), **Endpoint** (Anthropic API; OpenAI, Groq, Together, Mistral, Ollama, vLLM or a custom base URL) and **Model** dropdowns, each with a "Custom..." entry for any model name, plus an optional API key. A key typed there stays in that browser session's memory only. Switching keeps the study (basis, route, results) and restarts the model's conversation context, because message histories do not carry across providers.
+**In the app (left sidebar):**
+1. **Provider:** OpenAI, OpenRouter, Groq, Together, Mistral, Ollama Cloud, Ollama (local), vLLM (local), Anthropic (Claude), or Custom (any OpenAI-compatible server).
+2. **Endpoint (base URL):** filled in for each provider, editable for proxies, self-hosted servers or regional endpoints.
+3. **API key:** the key comes first, because most providers only list their models to a valid key. Leave it empty to use the key from the environment (e.g. `OPENROUTER_API_KEY`); local servers need none. Keys typed here stay in that browser session's memory only.
+4. **Model:** filled from the provider's live model list (`GET {base URL}/models`, cached per provider, endpoint and key; **Refresh model list** re-fetches). A rejected key or an unreachable server is reported, and "Custom model name..." always lets you type an id.
 
-**From the environment** (CLI, scripts, and the sidebar's starting values):
+Until a provider and model are chosen, the bot tab asks for them. Everything else in the app works without any model. Switching keeps the study (basis, route, results) and restarts the model's conversation context, because message histories do not carry across providers.
 
-| Variable | Meaning | Default |
-|---|---|---|
-| `PIPELINE_BOT_PROVIDER` | `anthropic` or `openai` (any OpenAI-compatible endpoint) | `anthropic` |
-| `PIPELINE_BOT_MODEL` | model name | `claude-opus-5-5`; required for `openai` |
-| `PIPELINE_BOT_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
-| `PIPELINE_BOT_API_KEY` | key for that endpoint (falls back to `OPENAI_API_KEY`; empty is fine for a local Ollama) | - |
-| `PIPELINE_BOT_TOKENS_PARAM` | `max_tokens` or `max_completion_tokens` (OpenAI reasoning models) | `max_tokens` |
-| `PIPELINE_BOT_REASONING_EFFORT` | sent as `reasoning_effort` when set | - |
+**Terminal (`pipeline-bot`):**
 
-Examples: Ollama locally - `PIPELINE_BOT_PROVIDER=openai PIPELINE_BOT_MODEL=llama3.1:70b PIPELINE_BOT_BASE_URL=http://localhost:11434/v1`. The Anthropic default keeps adaptive thinking, `effort=high`, server-side refusal fallback and the cached system prompt. The 30-case benchmark (`bot/evaluate.py`) was written against Claude; re-run it after switching providers.
+```bash
+pipeline-bot --provider openrouter --api-key sk-or-... --list-models
+pipeline-bot --provider openrouter --api-key sk-or-... --model openai/gpt-5
+pipeline-bot --provider ollama --model llama3.1
+pipeline-bot --provider custom --base-url https://llm.example.com/v1 --api-key ... --model my-model
+```
+
+**Environment** (CLI, benchmark, and the sidebar's starting values):
+
+| Variable | Meaning |
+|---|---|
+| `PIPELINE_BOT_PROVIDER` | provider name or alias: `openai`, `openrouter`, `groq`, `together`, `mistral`, `ollama`, `ollama-cloud`, `vllm`, `anthropic`, `custom`. If unset, the first provider whose own key variable is set is used; if none is, nothing is selected. |
+| `PIPELINE_BOT_MODEL` | model id |
+| `PIPELINE_BOT_BASE_URL` | overrides the provider's base URL |
+| `PIPELINE_BOT_API_KEY` | the key (else the provider's own variable: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY`, `TOGETHER_API_KEY`, `MISTRAL_API_KEY`, `OLLAMA_API_KEY`, `ANTHROPIC_API_KEY`) |
+| `PIPELINE_BOT_TOKENS_PARAM` | `max_tokens` (default) or `max_completion_tokens` (OpenAI reasoning models) |
+| `PIPELINE_BOT_REASONING_EFFORT` | sent as `reasoning_effort` when set |
+
+With Anthropic, the bot uses adaptive thinking, `effort=high`, server-side refusal fallback and a cached system prompt. Other providers use plain chat completions with function tools. The 30-case benchmark (`bot/evaluate.py`) was written against Claude; re-run it with your provider before relying on the answers.
 
 ## File attachments
 

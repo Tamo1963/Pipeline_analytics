@@ -109,14 +109,35 @@ def test_route_tab_finds_corridors() -> None:
     assert len(at.dataframe) >= 1
 
 
-def test_bot_tab_explains_missing_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE"):
+LLM_ENV = ("PIPELINE_BOT_PROVIDER", "PIPELINE_BOT_MODEL", "PIPELINE_BOT_BASE_URL",
+           "PIPELINE_BOT_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY",
+           "TOGETHER_API_KEY", "MISTRAL_API_KEY", "OLLAMA_API_KEY", "ANTHROPIC_API_KEY",
+           "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_PROFILE")  # fmt: skip
+
+
+def test_bot_needs_no_particular_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With no keys anywhere the bot asks for a provider; a local server needs no key, and a
+    failed call explains itself without losing the bot."""
+    for var in LLM_ENV:
         monkeypatch.delenv(var, raising=False)
+    from pipeline_analytics.bot import providers
+
+    def unreachable(kind: str, base: str, key: str) -> list[str]:
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(providers, "list_models", unreachable)
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
     assert not at.exception
+    assert at.sidebar.selectbox(key="llm_provider").value == "Select a provider..."
+    assert any("Set up the bot's model" in i.value for i in at.info)
+    assert not at.get("chat_input")
+    at.sidebar.selectbox(key="llm_provider").set_value("Ollama (local)").run()
+    assert any("Could not load the model list" in w.value for w in at.sidebar.warning)
+    at.sidebar.selectbox(key="llm_model_Ollama (local)").set_value("llama3.1").run()
     at.chat_input(key="bot_input").set_value("Wall for 24 inch X70 at 92 barg?").run()
     assert not at.exception
     assert any("model call failed" in e.value for e in at.error)
+    assert at.session_state["bot"] is not None  # study kept for a retry
 
 
 def test_report_downloads_and_route_map() -> None:
@@ -216,25 +237,71 @@ def test_wiki_tab_write_search_and_bot_uploader(
     assert WikiStore(tmp_path / "pipeline_wiki.db").count() == 1
 
 
-def test_sidebar_switches_bot_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in ("PIPELINE_BOT_PROVIDER", "PIPELINE_BOT_MODEL", "PIPELINE_BOT_BASE_URL"):
+def test_sidebar_key_loads_models_and_switches_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for var in LLM_ENV:
         monkeypatch.delenv(var, raising=False)
+    from pipeline_analytics.bot import providers
+
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_list(kind: str, base: str, key: str) -> list[str]:
+        calls.append((kind, base, key))
+        if key != "sk-or-good":
+            raise PermissionError("the API key was rejected (401)")
+        return ["anthropic/claude-opus-5.5", "openai/gpt-5", "qwen/qwen3-235b"]
+
+    monkeypatch.setattr(providers, "list_models", fake_list)
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
-    assert not at.exception
-    assert at.sidebar.selectbox(key="llm_provider").value == "Anthropic (Claude)"
-    assert at.sidebar.selectbox(key="llm_model_a").value == "claude-opus-5-5"
-    at.sidebar.selectbox(key="llm_provider").set_value("OpenAI-compatible").run()
-    at.sidebar.selectbox(key="llm_endpoint").set_value("Ollama (local)").run()
-    at.sidebar.selectbox(key="llm_model_Ollama (local)").set_value("qwen2.5").run()
-    assert not at.exception
+    at.sidebar.selectbox(key="llm_provider").set_value("OpenRouter").run()
+    # no key yet: the model list waits for it
+    assert any("Enter your OpenRouter API key" in i.value for i in at.sidebar.info)
+    assert not calls
+    at.sidebar.text_input(key="llm_key_OpenRouter").set_value("sk-or-bad").run()
+    assert any("rejected" in w.value for w in at.sidebar.warning)
+    at.sidebar.text_input(key="llm_key_OpenRouter").set_value("sk-or-good").run()
+    assert calls[-1] == ("openai", "https://openrouter.ai/api/v1", "sk-or-good")
+    model_box = at.sidebar.selectbox(key="llm_model_OpenRouter")
+    assert model_box.options[:3] == [
+        "anthropic/claude-opus-5.5", "openai/gpt-5", "qwen/qwen3-235b"]  # fmt: skip
+    model_box.set_value("openai/gpt-5").run()
     bot = at.session_state["bot"]
     assert type(bot.provider).__name__ == "OpenAIChatProvider"
-    assert bot.model == "qwen2.5" and bot.provider.base_url == "http://localhost:11434/v1"
-    assert any("qwen2.5 via http://localhost:11434/v1" in c.value for c in at.caption)
-    # custom model name on a custom endpoint
-    at.sidebar.selectbox(key="llm_endpoint").set_value("Custom").run()
-    at.sidebar.text_input(key="llm_base_Custom").set_value("http://gpu-box:9000/v1").run()
-    at.sidebar.selectbox(key="llm_model_Custom").set_value("Custom...").run()
-    at.sidebar.text_input(key="llm_model_custom_Custom").set_value("my-model").run()
+    assert bot.model == "openai/gpt-5" and bot.provider.api_key == "sk-or-good"
+    n_calls = len(calls)
+    at.run()  # cached: no refetch on rerun
+    assert len(calls) == n_calls
+    # custom server, custom model name
+    at.sidebar.selectbox(key="llm_provider").set_value("Custom (OpenAI-compatible)").run()
+    at.sidebar.text_input(key="llm_base_Custom (OpenAI-compatible)").set_value(
+        "http://gpu-box:9000/v1").run()  # fmt: skip
+    at.sidebar.selectbox(key="llm_model_Custom (OpenAI-compatible)").set_value(
+        "Custom model name...").run()  # fmt: skip
+    at.sidebar.text_input(key="llm_model_custom_Custom (OpenAI-compatible)").set_value(
+        "my-model").run()  # fmt: skip
     bot = at.session_state["bot"]
     assert bot.model == "my-model" and bot.provider.base_url == "http://gpu-box:9000/v1"
+
+
+def test_model_selection_follows_a_newly_loaded_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A server that only lists models once the key is entered: the dropdown must move from
+    'Custom model name...' to the first real model."""
+    for var in LLM_ENV:
+        monkeypatch.delenv(var, raising=False)
+    from pipeline_analytics.bot import providers
+
+    def needs_key(kind: str, base: str, key: str) -> list[str]:
+        if key != "k":
+            raise PermissionError("the API key was rejected (401)")
+        return ["acme/fast-8b", "acme/pipeline-70b"]
+
+    monkeypatch.setattr(providers, "list_models", needs_key)
+    at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+    name = "Custom (OpenAI-compatible)"
+    at.sidebar.selectbox(key="llm_provider").set_value(name).run()
+    at.sidebar.text_input(key=f"llm_base_{name}").set_value("http://srv/v1").run()
+    assert at.sidebar.selectbox(key=f"llm_model_{name}").value == "Custom model name..."
+    at.sidebar.text_input(key=f"llm_key_{name}").set_value("k").run()
+    assert at.sidebar.selectbox(key=f"llm_model_{name}").value == "acme/fast-8b"
+    assert at.session_state["bot"].model == "acme/fast-8b"

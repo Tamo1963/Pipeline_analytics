@@ -79,65 +79,97 @@ st.caption(f"pipeline-analytics v{__version__}")
 
 
 # -------------------------------------------------------------- sidebar: LLM
-def _llm_sidebar() -> tuple[str, str, str, str]:
-    """Provider, endpoint and model for the feasibility bot. Returns (kind, model,
-    base_url, api_key); defaults come from the PIPELINE_BOT_* environment variables.
-    A key typed here lives only in this browser session's memory."""
-    import os
+def _llm_sidebar() -> tuple[str, str, str, str] | None:
+    """Provider, endpoint, API key and model for the feasibility bot.
 
-    from pipeline_analytics.bot.providers import (
-        ANTHROPIC_MODELS,
-        DEFAULT_ANTHROPIC_MODEL,
-        KNOWN_ENDPOINTS,
-        MODEL_SUGGESTIONS,
-    )
+    Returns (kind, model, base_url, api_key), or None until a usable provider is
+    chosen. No provider is assumed: the starting choice is PIPELINE_BOT_PROVIDER, else
+    the first provider whose key variable is set, else "Select a provider...". The key
+    box comes before the model list; with a key, the provider's own model list is
+    fetched (``GET {base_url}/models``). Keys typed here live in this browser
+    session's memory only.
+    """
+    import hashlib
 
-    custom = "Custom..."
-    env_kind = os.environ.get("PIPELINE_BOT_PROVIDER", "anthropic").strip().lower()
-    env_model = os.environ.get("PIPELINE_BOT_MODEL", "").strip()
-    env_base = os.environ.get("PIPELINE_BOT_BASE_URL", "").strip()
+    from pipeline_analytics.bot import providers as prov
+
+    pick_one, custom = "Select a provider...", "Custom model name..."
+    names = [p.name for p in prov.PRESETS]
+    try:
+        env = prov.env_settings()
+    except ValueError:
+        env = None
+    start = env[0].name if env else pick_one
     with st.sidebar:
         st.header("Feasibility bot model")
-        kinds = ["Anthropic (Claude)", "OpenAI-compatible"]
-        kind_label = st.selectbox(
-            "Provider", kinds, index=1 if env_kind.startswith("openai") else 0,
-            key="llm_provider",
+        all_names = [pick_one, *names]
+        choice = st.selectbox(
+            "Provider", all_names, index=all_names.index(start), key="llm_provider"
+        )
+        if choice == pick_one:
+            st.caption("Choose the LLM service the bot should use. Any provider works; "
+                       "none is required.")  # fmt: skip
+            return None
+        preset = prov.PRESET_BY_NAME[choice]
+        env_base = env[2] if env and env[0].name == choice else ""
+        base_url = st.text_input(
+            "Endpoint (base URL)", value=env_base or preset.base_url,
+            key=f"llm_base_{choice}",
+            help="The provider's API address. Change it for a proxy, a self-hosted "
+            "server or a regional endpoint.",
+        ).strip()  # fmt: skip
+        stored_key = (env[3] if env and env[0].name == choice else "") or prov.env_key(preset)
+        typed = st.text_input(
+            "API key" + ("" if preset.needs_key else " (if your server needs one)"),
+            type="password", key=f"llm_key_{choice}",
+            placeholder="using the key from the environment" if stored_key else "",
+            help="Kept in this browser session only. Entering it loads the provider's "
+            "model list."
+            + (f" Leave empty to use {preset.key_env}." if preset.key_env else ""),
+        ).strip()  # fmt: skip
+        api_key = typed or stored_key
+        if preset.needs_key and not api_key:
+            st.info(f"Enter your {choice} API key to load its models.")
+            return None
+
+        # live model list, cached per (provider, endpoint, key)
+        cache: dict[tuple[str, str, str], list[str]] = st.session_state.setdefault("llm_models", {})
+        sig = (choice, base_url, hashlib.sha256(api_key.encode()).hexdigest()[:16])
+        refresh = st.button("Refresh model list", key="llm_refresh")
+        if refresh or sig not in cache:
+            try:
+                with st.spinner("Loading models..."):
+                    cache[sig] = prov.list_models(preset.kind, base_url, api_key)
+                st.session_state.llm_models_error = ""
+            except Exception as e:  # rejected key, unreachable server, ...
+                cache[sig] = []
+                st.session_state.llm_models_error = str(e)
+        models = cache[sig]
+        if st.session_state.get("llm_models_error"):
+            st.warning(f"Could not load the model list: {st.session_state.llm_models_error}. "
+                       "Check the key and the endpoint, or type a model name.")  # fmt: skip
+        elif models:
+            st.caption(f"{len(models)} models available to this key.")
+        options = models or list(preset.suggestions)
+        env_model = env[1] if env and env[0].name == choice else ""
+        if env_model and env_model not in options:
+            options = [env_model, *options]
+        # when the list changes (e.g. a key was just entered), move the selection to it
+        mkey, okey = f"llm_model_{choice}", f"llm_model_opts_{choice}"
+        if st.session_state.get(okey) != options:
+            st.session_state[okey] = list(options)
+            st.session_state[mkey] = (
+                env_model if env_model in options else (options[0] if options else custom)
+            )
+        model_pick = st.selectbox("Model", [*options, custom], key=mkey)
+        model = (
+            st.text_input("Model name", key=f"llm_model_custom_{choice}").strip()
+            if model_pick == custom else model_pick
         )  # fmt: skip
-        if kind_label == kinds[0]:
-            st.selectbox("Endpoint", ["Anthropic API"], key="llm_endpoint_a",
-                         help="Anthropic's API; credentials from ANTHROPIC_API_KEY, "
-                         "`ant auth login`, or the key field below.")  # fmt: skip
-            options = list(dict.fromkeys([env_model or DEFAULT_ANTHROPIC_MODEL,
-                                          *ANTHROPIC_MODELS]))  # fmt: skip
-            pick = st.selectbox("Model", [*options, custom], key="llm_model_a")
-            model = (st.text_input("Model name", key="llm_model_a_custom").strip()
-                     if pick == custom else pick)  # fmt: skip
-            key = st.text_input("API key (optional)", type="password", key="llm_key_a",
-                                help="Leave empty to use ANTHROPIC_API_KEY or your "
-                                "`ant auth login` profile.")  # fmt: skip
-            return "anthropic", model or DEFAULT_ANTHROPIC_MODEL, "", key
-        names = list(KNOWN_ENDPOINTS)
-        start = next((n for n, u in KNOWN_ENDPOINTS.items() if u and u == env_base),
-                     "Custom" if env_base else "OpenAI")  # fmt: skip
-        endpoint = st.selectbox("Endpoint", names, index=names.index(start), key="llm_endpoint")
-        default_url = KNOWN_ENDPOINTS[endpoint] or env_base
-        base_url = st.text_input("Base URL", value=default_url, key=f"llm_base_{endpoint}",
-                                 disabled=endpoint != "Custom").strip()  # fmt: skip
-        suggestions = list(MODEL_SUGGESTIONS.get(endpoint, ()))
-        if env_model and env_model not in suggestions:
-            suggestions.insert(0, env_model)
-        pick = st.selectbox("Model", [*suggestions, custom], key=f"llm_model_{endpoint}")
-        model = (st.text_input("Model name", key=f"llm_model_custom_{endpoint}").strip()
-                 if pick == custom else pick)  # fmt: skip
-        key = st.text_input(
-            "API key", type="password", key="llm_key_o",
-            help="Leave empty to use PIPELINE_BOT_API_KEY / OPENAI_API_KEY (or none for a "
-            "local Ollama / vLLM server).",
-        )  # fmt: skip
-        if not key:
-            key = (os.environ.get("PIPELINE_BOT_API_KEY", "")
-                   or os.environ.get("OPENAI_API_KEY", ""))  # fmt: skip
-        return "openai", model, base_url, key
+        if not model:
+            st.info("Choose or type a model.")
+            return None
+        return preset.kind, model, base_url, api_key
 
 
 LLM_CFG = _llm_sidebar()
@@ -1283,8 +1315,10 @@ with route_tab:
 with bot_tab:
     from pipeline_analytics.bot.uploads import parse_upload
 
-    _active = (f"Claude ({LLM_CFG[1]})" if LLM_CFG[0] == "anthropic"
-               else f"{LLM_CFG[1] or '?'} via {LLM_CFG[2]}")  # fmt: skip
+    _active = (
+        "none selected" if LLM_CFG is None
+        else f"{LLM_CFG[1]} ({st.session_state.get('llm_provider', '')})"
+    )  # fmt: skip
     st.caption(
         "Describe your project in plain language: fluid, flow, route legs, pressures, concession. "
         "The bot runs the engine's tools and answers only with figures they return; each answer "
@@ -1298,7 +1332,15 @@ with bot_tab:
         accept_multiple_files=True,
         key="bot_files",
     )  # fmt: skip
-    if "bot" not in st.session_state or st.session_state.get("bot_cfg") != LLM_CFG:
+    from pipeline_analytics.bot.study import Study
+
+    session_study = st.session_state.setdefault("study", Study())
+    st.session_state.setdefault("chat", [])
+    if LLM_CFG is None:
+        st.session_state.bot_error = (
+            "no model chosen yet: pick a provider, enter its API key and choose a model"
+        )
+    elif st.session_state.get("bot_cfg") != LLM_CFG:
         try:
             from pipeline_analytics.bot import FeasibilityBot
             from pipeline_analytics.bot.providers import make_provider
@@ -1316,20 +1358,22 @@ with bot_tab:
                          "results) is kept; the model's conversation context restarts._")
                     )  # fmt: skip
             else:
-                st.session_state.bot = FeasibilityBot(provider=provider)
-                st.session_state.chat = []
+                new_bot = FeasibilityBot(provider=provider)
+                new_bot.study = session_study  # the study outlives model changes
+                st.session_state.bot = new_bot
             st.session_state.bot_error = ""
-        except Exception as e:  # missing extra, bad settings
-            st.session_state.bot = None
+            st.session_state.bot_cfg = LLM_CFG
+        except Exception as e:  # missing package, bad settings: keep any existing study
             st.session_state.bot_error = str(e)
-        st.session_state.bot_cfg = LLM_CFG
-    bot = st.session_state.bot
-    if bot is None:
+            st.session_state.bot_cfg = None
+    bot = st.session_state.get("bot")
+    bot_ready = LLM_CFG is not None and st.session_state.get("bot_cfg") == LLM_CFG
+    if not bot_ready or bot is None:
         st.info(
-            "The bot could not start with the sidebar settings. Claude: install the 'bot' "
-            "extra and set ANTHROPIC_API_KEY, sign in with `ant auth login`, or paste a key "
-            "in the sidebar. OpenAI-compatible: choose an endpoint and a model name. "
-            f"Details: {st.session_state.get('bot_error', '')}"
+            "Set up the bot's model in the sidebar: pick a provider (OpenRouter, Groq, "
+            "OpenAI, Ollama, Anthropic, a custom OpenAI-compatible server, ...), enter its "
+            "API key to load its models, and choose one. "
+            f"Status: {st.session_state.get('bot_error', '')}"
         )
     else:
         for role, msg in st.session_state.chat:
@@ -1351,9 +1395,8 @@ with bot_tab:
                     reply = bot.ask(prompt, attachments=atts)
             except Exception as e:  # credentials, network, rate limits
                 st.error(
-                    "The model call failed. Check the sidebar: for Claude, a key (or "
-                    "ANTHROPIC_API_KEY / `ant auth login`); for other providers, the base URL, "
-                    f"model name and key. ({e})"
+                    "The model call failed. Check the provider, endpoint, API key and model "
+                    f"in the sidebar. ({e})"
                 )
                 # keep the bot and its study; drop the unanswered message so the
                 # conversation stays valid after the settings are fixed
@@ -1430,15 +1473,18 @@ with proj_tab:
     user = _current_user()
     store = ProjectStore()
     the_bot = st.session_state.get("bot")
+    from pipeline_analytics.bot.study import Study as _Study
+
+    the_study = st.session_state.setdefault("study", _Study())
     if user:
         with st.expander("New project"):
             n_name = st.text_input("Project name", key="p_new_name")
             n_desc = st.text_input("Description", key="p_new_desc")
-            n_cur = st.checkbox("Start from the current bot study", value=the_bot is not None,
-                                disabled=the_bot is None, key="p_new_cur")  # fmt: skip
+            n_cur = st.checkbox("Start from the current study", value=True,
+                                key="p_new_cur")  # fmt: skip
             if st.button("Create project", key="p_create", disabled=not n_name.strip()):
-                payload = (study_to_payload(the_bot.study, st.session_state.get("chat", []))
-                           if n_cur and the_bot is not None else None)  # fmt: skip
+                payload = (study_to_payload(the_study, st.session_state.get("chat", []))
+                           if n_cur else None)  # fmt: skip
                 created = store.create(n_name, user, n_desc, payload=payload)
                 st.session_state.p_open = (created.id, created.latest_version)
                 st.success(f"Created {created.name}.")
@@ -1484,11 +1530,11 @@ with proj_tab:
                     [h.version for h in reversed(hist)] or [0],
                     key=f"p_version_{pid}_{proj.latest_version}",
                 )
-                if st.button("Open in the bot", key="p_load", disabled=not hist or the_bot is None):
-                    assert the_bot is not None
+                if st.button("Open in the bot", key="p_load", disabled=not hist):
                     v = store.load(pid, user, version)
-                    payload_to_study(v.payload, the_bot.study)
-                    the_bot.messages = []  # the model starts fresh; the study is restored
+                    payload_to_study(v.payload, the_study)
+                    if the_bot is not None:
+                        the_bot.messages = []  # the model starts fresh; the study is restored
                     st.session_state.chat = chat_of(v.payload)
                     st.session_state.p_open = (pid, proj.latest_version)
                     s = summary_of(v.payload)
@@ -1505,16 +1551,15 @@ with proj_tab:
                 if role in ("owner", "editor"):
                     msg = st.text_input("Save message", key="p_msg")
                     base_v = opened[1] if opened and opened[0] == pid else None
-                    can_save = the_bot is not None and (base_v is not None or not hist)
-                    if not can_save and the_bot is not None:
+                    can_save = base_v is not None or not hist
+                    if not can_save:
                         st.caption("Open this project in the bot before saving to it.")
                     if st.button("Save the bot study as a new version", key="p_save",
                                  disabled=not can_save):  # fmt: skip
-                        assert the_bot is not None
                         try:
                             v = store.save(
                                 pid, user,
-                                study_to_payload(the_bot.study, st.session_state.get("chat", [])),
+                                study_to_payload(the_study, st.session_state.get("chat", [])),
                                 msg, expected_version=base_v or 0,
                             )  # fmt: skip
                         except VersionConflictError as e:

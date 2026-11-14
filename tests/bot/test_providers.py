@@ -10,6 +10,9 @@ from pipeline_analytics.bot.providers import (
     AnthropicProvider,
     Block,
     OpenAIChatProvider,
+    env_settings,
+    list_models,
+    preset_named,
     provider_from_env,
     provider_label,
 )
@@ -116,22 +119,99 @@ def test_bot_runs_on_openai_provider() -> None:
     assert sent[1]["messages"][0]["role"] == "system"
 
 
-def test_provider_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in ("PIPELINE_BOT_PROVIDER", "PIPELINE_BOT_MODEL", "PIPELINE_BOT_BASE_URL",
-                "PIPELINE_BOT_API_KEY", "OPENAI_API_KEY"):  # fmt: skip
+ENV_VARS = (
+    "PIPELINE_BOT_PROVIDER", "PIPELINE_BOT_MODEL", "PIPELINE_BOT_BASE_URL",
+    "PIPELINE_BOT_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY",
+    "TOGETHER_API_KEY", "MISTRAL_API_KEY", "OLLAMA_API_KEY", "ANTHROPIC_API_KEY",
+)  # fmt: skip
+
+
+@pytest.fixture
+def clean_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    for var in ENV_VARS:
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("PIPELINE_BOT_PROVIDER", "openai")
-    with pytest.raises(ValueError, match="PIPELINE_BOT_MODEL"):
+    return monkeypatch
+
+
+def test_no_provider_is_assumed(clean_env: pytest.MonkeyPatch) -> None:
+    assert env_settings() is None
+    with pytest.raises(ValueError, match="no LLM provider configured"):
         provider_from_env()
-    monkeypatch.setenv("PIPELINE_BOT_MODEL", "llama3.1:70b")
-    monkeypatch.setenv("PIPELINE_BOT_BASE_URL", "http://localhost:11434/v1")
+    assert provider_label() == "no provider configured"
+
+
+def test_env_picks_the_provider_whose_key_is_set(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    preset, model, base, key = env_settings()  # type: ignore[misc]
+    assert preset.name == "OpenRouter" and base == "https://openrouter.ai/api/v1"
+    assert key == "sk-or-test" and model == ""
+    with pytest.raises(ValueError, match="choose a model"):
+        provider_from_env()
+    clean_env.setenv("PIPELINE_BOT_MODEL", "openai/gpt-5")
     p = provider_from_env()
-    assert isinstance(p, OpenAIChatProvider)
-    assert p.default_model == "llama3.1:70b" and p.base_url == "http://localhost:11434/v1"
-    assert "llama3.1:70b" in provider_label()
-    monkeypatch.setenv("PIPELINE_BOT_PROVIDER", "weird")
+    assert isinstance(p, OpenAIChatProvider) and p.api_key == "sk-or-test"
+
+
+def test_env_named_presets_and_aliases(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("PIPELINE_BOT_PROVIDER", "groq")
+    clean_env.setenv("PIPELINE_BOT_MODEL", "llama-3.3-70b-versatile")
+    with pytest.raises(ValueError, match="needs an API key"):
+        provider_from_env()
+    clean_env.setenv("PIPELINE_BOT_API_KEY", "gsk")
+    assert provider_from_env().base_url == "https://api.groq.com/openai/v1"  # type: ignore[union-attr]
+    clean_env.setenv("PIPELINE_BOT_PROVIDER", "ollama")  # local: no key needed
+    clean_env.delenv("PIPELINE_BOT_API_KEY")
+    clean_env.setenv("PIPELINE_BOT_MODEL", "llama3.1")
+    p = provider_from_env()
+    assert p.base_url == "http://localhost:11434/v1" and p.api_key == ""  # type: ignore[union-attr]
+    assert preset_named("Ollama Cloud").needs_key  # type: ignore[union-attr]
+    clean_env.setenv("PIPELINE_BOT_PROVIDER", "weird")
     with pytest.raises(ValueError, match="unknown"):
         provider_from_env()
+
+
+def test_list_models_openai_compatible_shapes() -> None:
+    seen: list[tuple[str, str]] = []
+
+    def fetch(url: str, key: str, timeout: float) -> Any:
+        seen.append((url, key))
+        return {"data": [{"id": "z-model"}, {"id": "a-model"}, {"id": "a-model"}]}
+
+    assert list_models("openai", "https://openrouter.ai/api/v1/", "sk", fetch=fetch) == [
+        "a-model", "z-model"]  # fmt: skip
+    assert seen == [("https://openrouter.ai/api/v1/models", "sk")]
+    # Ollama native-style and bare-list payloads
+    assert list_models("openai", "http://x/v1", "", fetch=lambda *a: {"models": [
+        {"name": "llama3.1"}]}) == ["llama3.1"]  # fmt: skip
+    assert list_models("openai", "http://x/v1", "", fetch=lambda *a: ["m1"]) == ["m1"]
+    with pytest.raises(ValueError, match="base URL"):
+        list_models("openai", "", "k", fetch=fetch)
+
+
+def test_list_models_rejected_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    import httpx
+
+    def fake_get(url: str, headers: dict[str, str], timeout: float) -> httpx.Response:
+        assert headers == {"Authorization": "Bearer bad"}
+        return httpx.Response(401, text="no", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    with pytest.raises(PermissionError, match="rejected"):
+        list_models("openai", "https://api.groq.com/openai/v1", "bad")
+
+
+def test_cli_without_provider_and_list_models(
+    clean_env: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pipeline_analytics.bot import cli, providers
+
+    assert cli.main([]) == 2
+    assert "No LLM provider configured" in capsys.readouterr().err
+    assert cli.main(["--provider", "openrouter", "--model", "m"]) == 2
+    assert "needs an API key" in capsys.readouterr().err
+    clean_env.setattr(providers, "list_models", lambda kind, base, key: ["m-1", "m-2"])
+    assert cli.main(["--provider", "openrouter", "--api-key", "sk", "--list-models"]) == 0
+    assert capsys.readouterr().out.split() == ["m-1", "m-2"]
 
 
 def test_anthropic_provider_request_shape() -> None:
