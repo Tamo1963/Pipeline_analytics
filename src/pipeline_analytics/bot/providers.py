@@ -263,6 +263,53 @@ class OpenAIChatProvider:
         return self._response_in(self._post(payload))
 
 
+KNOWN_ENDPOINTS: dict[str, str] = {
+    "OpenAI": "https://api.openai.com/v1",
+    "Groq": "https://api.groq.com/openai/v1",
+    "Together": "https://api.together.xyz/v1",
+    "Mistral": "https://api.mistral.ai/v1",
+    "Ollama (local)": "http://localhost:11434/v1",
+    "vLLM (local)": "http://localhost:8000/v1",
+    "Custom": "",
+}
+ANTHROPIC_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5")
+MODEL_SUGGESTIONS: dict[str, tuple[str, ...]] = {
+    "OpenAI": ("gpt-5.1", "gpt-5", "gpt-4.1"),
+    "Groq": ("llama-3.3-70b-versatile", "llama-3.1-8b-instant"),
+    "Together": ("meta-llama/Llama-3.3-70B-Instruct-Turbo",),
+    "Mistral": ("mistral-large-latest", "mistral-small-latest"),
+    "Ollama (local)": ("llama3.1", "qwen2.5", "mistral"),
+    "vLLM (local)": (),
+    "Custom": (),
+}
+"""Dropdown seeds for UIs; model names drift, so a custom entry is always offered."""
+
+
+def make_provider(
+    kind: str, model: str = "", base_url: str = "", api_key: str = ""
+) -> AnthropicProvider | OpenAIChatProvider:
+    """Build a provider from plain settings (what the app's sidebar collects)."""
+    kind = kind.strip().lower()
+    if kind in ("anthropic", "claude", ""):
+        client = None
+        if api_key.strip():
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=api_key.strip())
+        return AnthropicProvider(client, default_model=model or DEFAULT_ANTHROPIC_MODEL)
+    if kind in ("openai", "openai-compatible", "openai_compatible"):
+        if not model.strip():
+            raise ValueError("an OpenAI-compatible endpoint needs a model name")
+        return OpenAIChatProvider(
+            model=model.strip(),
+            base_url=(base_url or "https://api.openai.com/v1").strip(),
+            api_key=api_key.strip(),
+            tokens_param=os.environ.get("PIPELINE_BOT_TOKENS_PARAM", "max_tokens"),
+            reasoning_effort=os.environ.get("PIPELINE_BOT_REASONING_EFFORT", ""),
+        )
+    raise ValueError(f"unknown provider {kind!r}: use 'anthropic' or 'openai'")
+
+
 def provider_from_env() -> AnthropicProvider | OpenAIChatProvider:
     """The provider the environment selects (see the module docstring)."""
     kind = os.environ.get("PIPELINE_BOT_PROVIDER", "anthropic").strip().lower()
@@ -272,13 +319,12 @@ def provider_from_env() -> AnthropicProvider | OpenAIChatProvider:
     if kind in ("openai", "openai-compatible", "openai_compatible"):
         if not model:
             raise ValueError("PIPELINE_BOT_PROVIDER=openai needs PIPELINE_BOT_MODEL")
-        return OpenAIChatProvider(
+        return make_provider(
+            "openai",
             model=model,
             base_url=os.environ.get("PIPELINE_BOT_BASE_URL", "https://api.openai.com/v1"),
             api_key=os.environ.get("PIPELINE_BOT_API_KEY", "")
             or os.environ.get("OPENAI_API_KEY", ""),
-            tokens_param=os.environ.get("PIPELINE_BOT_TOKENS_PARAM", "max_tokens"),
-            reasoning_effort=os.environ.get("PIPELINE_BOT_REASONING_EFFORT", ""),
         )
     raise ValueError(f"unknown PIPELINE_BOT_PROVIDER {kind!r}: use 'anthropic' or 'openai'")
 

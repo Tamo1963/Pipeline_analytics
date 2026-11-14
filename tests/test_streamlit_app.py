@@ -214,3 +214,27 @@ def test_wiki_tab_write_search_and_bot_uploader(
     from pipeline_analytics.wiki import WikiStore
 
     assert WikiStore(tmp_path / "pipeline_wiki.db").count() == 1
+
+
+def test_sidebar_switches_bot_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("PIPELINE_BOT_PROVIDER", "PIPELINE_BOT_MODEL", "PIPELINE_BOT_BASE_URL"):
+        monkeypatch.delenv(var, raising=False)
+    at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+    assert not at.exception
+    assert at.sidebar.selectbox(key="llm_provider").value == "Anthropic (Claude)"
+    assert at.sidebar.selectbox(key="llm_model_a").value == "claude-opus-5-5"
+    at.sidebar.selectbox(key="llm_provider").set_value("OpenAI-compatible").run()
+    at.sidebar.selectbox(key="llm_endpoint").set_value("Ollama (local)").run()
+    at.sidebar.selectbox(key="llm_model_Ollama (local)").set_value("qwen2.5").run()
+    assert not at.exception
+    bot = at.session_state["bot"]
+    assert type(bot.provider).__name__ == "OpenAIChatProvider"
+    assert bot.model == "qwen2.5" and bot.provider.base_url == "http://localhost:11434/v1"
+    assert any("qwen2.5 via http://localhost:11434/v1" in c.value for c in at.caption)
+    # custom model name on a custom endpoint
+    at.sidebar.selectbox(key="llm_endpoint").set_value("Custom").run()
+    at.sidebar.text_input(key="llm_base_Custom").set_value("http://gpu-box:9000/v1").run()
+    at.sidebar.selectbox(key="llm_model_Custom").set_value("Custom...").run()
+    at.sidebar.text_input(key="llm_model_custom_Custom").set_value("my-model").run()
+    bot = at.session_state["bot"]
+    assert bot.model == "my-model" and bot.provider.base_url == "http://gpu-box:9000/v1"

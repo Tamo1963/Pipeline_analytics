@@ -75,7 +75,11 @@ This calls the Claude API and costs money. The full studies run the optimiser (1
 
 ## Choosing the LLM (provider adapters)
 
-The tool loop and the number guardrail are provider-agnostic (`bot/providers.py`); the engine's results never depend on the model. Select the provider with environment variables and restart:
+The tool loop and the number guardrail are provider-agnostic (`bot/providers.py`); the engine's results never depend on the model.
+
+**In the app:** the left sidebar has **Provider** (Anthropic or OpenAI-compatible), **Endpoint** (Anthropic API; OpenAI, Groq, Together, Mistral, Ollama, vLLM or a custom base URL) and **Model** dropdowns, each with a "Custom..." entry for any model name, plus an optional API key. A key typed there stays in that browser session's memory only. Switching keeps the study (basis, route, results) and restarts the model's conversation context, because message histories do not carry across providers.
+
+**From the environment** (CLI, scripts, and the sidebar's starting values):
 
 | Variable | Meaning | Default |
 |---|---|---|

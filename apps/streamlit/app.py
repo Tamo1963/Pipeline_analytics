@@ -77,6 +77,71 @@ st.set_page_config(page_title="Pipeline Feasibility", layout="wide")
 st.title("Cross-Country Pipeline Feasibility")
 st.caption(f"pipeline-analytics v{__version__}")
 
+
+# -------------------------------------------------------------- sidebar: LLM
+def _llm_sidebar() -> tuple[str, str, str, str]:
+    """Provider, endpoint and model for the feasibility bot. Returns (kind, model,
+    base_url, api_key); defaults come from the PIPELINE_BOT_* environment variables.
+    A key typed here lives only in this browser session's memory."""
+    import os
+
+    from pipeline_analytics.bot.providers import (
+        ANTHROPIC_MODELS,
+        DEFAULT_ANTHROPIC_MODEL,
+        KNOWN_ENDPOINTS,
+        MODEL_SUGGESTIONS,
+    )
+
+    custom = "Custom..."
+    env_kind = os.environ.get("PIPELINE_BOT_PROVIDER", "anthropic").strip().lower()
+    env_model = os.environ.get("PIPELINE_BOT_MODEL", "").strip()
+    env_base = os.environ.get("PIPELINE_BOT_BASE_URL", "").strip()
+    with st.sidebar:
+        st.header("Feasibility bot model")
+        kinds = ["Anthropic (Claude)", "OpenAI-compatible"]
+        kind_label = st.selectbox(
+            "Provider", kinds, index=1 if env_kind.startswith("openai") else 0,
+            key="llm_provider",
+        )  # fmt: skip
+        if kind_label == kinds[0]:
+            st.selectbox("Endpoint", ["Anthropic API"], key="llm_endpoint_a",
+                         help="Anthropic's API; credentials from ANTHROPIC_API_KEY, "
+                         "`ant auth login`, or the key field below.")  # fmt: skip
+            options = list(dict.fromkeys([env_model or DEFAULT_ANTHROPIC_MODEL,
+                                          *ANTHROPIC_MODELS]))  # fmt: skip
+            pick = st.selectbox("Model", [*options, custom], key="llm_model_a")
+            model = (st.text_input("Model name", key="llm_model_a_custom").strip()
+                     if pick == custom else pick)  # fmt: skip
+            key = st.text_input("API key (optional)", type="password", key="llm_key_a",
+                                help="Leave empty to use ANTHROPIC_API_KEY or your "
+                                "`ant auth login` profile.")  # fmt: skip
+            return "anthropic", model or DEFAULT_ANTHROPIC_MODEL, "", key
+        names = list(KNOWN_ENDPOINTS)
+        start = next((n for n, u in KNOWN_ENDPOINTS.items() if u and u == env_base),
+                     "Custom" if env_base else "OpenAI")  # fmt: skip
+        endpoint = st.selectbox("Endpoint", names, index=names.index(start), key="llm_endpoint")
+        default_url = KNOWN_ENDPOINTS[endpoint] or env_base
+        base_url = st.text_input("Base URL", value=default_url, key=f"llm_base_{endpoint}",
+                                 disabled=endpoint != "Custom").strip()  # fmt: skip
+        suggestions = list(MODEL_SUGGESTIONS.get(endpoint, ()))
+        if env_model and env_model not in suggestions:
+            suggestions.insert(0, env_model)
+        pick = st.selectbox("Model", [*suggestions, custom], key=f"llm_model_{endpoint}")
+        model = (st.text_input("Model name", key=f"llm_model_custom_{endpoint}").strip()
+                 if pick == custom else pick)  # fmt: skip
+        key = st.text_input(
+            "API key", type="password", key="llm_key_o",
+            help="Leave empty to use PIPELINE_BOT_API_KEY / OPENAI_API_KEY (or none for a "
+            "local Ollama / vLLM server).",
+        )  # fmt: skip
+        if not key:
+            key = (os.environ.get("PIPELINE_BOT_API_KEY", "")
+                   or os.environ.get("OPENAI_API_KEY", ""))  # fmt: skip
+        return "openai", model, base_url, key
+
+
+LLM_CFG = _llm_sidebar()
+
 bot_tab, basis_tab, library_tab, mech_tab, hyd_tab, econ_tab, route_tab, proj_tab, wiki_tab = (
     st.tabs(
         [
@@ -1216,14 +1281,15 @@ with route_tab:
 
 # ------------------------------------------------------------ feasibility bot
 with bot_tab:
-    from pipeline_analytics.bot.providers import provider_label
     from pipeline_analytics.bot.uploads import parse_upload
 
+    _active = (f"Claude ({LLM_CFG[1]})" if LLM_CFG[0] == "anthropic"
+               else f"{LLM_CFG[1] or '?'} via {LLM_CFG[2]}")  # fmt: skip
     st.caption(
         "Describe your project in plain language: fluid, flow, route legs, pressures, concession. "
         "The bot runs the engine's tools and answers only with figures they return; each answer "
-        f"is checked for numbers that no tool produced. Model: {provider_label()} "
-        "(set PIPELINE_BOT_PROVIDER / MODEL / BASE_URL / API_KEY for another LLM)."
+        f"is checked for numbers that no tool produced. Model: **{_active}** (change it in the "
+        "sidebar)."
     )
     bot_files = st.file_uploader(
         "Attach files to your next message (PDF, DOCX, image, KML/KMZ map, text)",
@@ -1232,22 +1298,37 @@ with bot_tab:
         accept_multiple_files=True,
         key="bot_files",
     )  # fmt: skip
-    if "bot" not in st.session_state:
+    if "bot" not in st.session_state or st.session_state.get("bot_cfg") != LLM_CFG:
         try:
             from pipeline_analytics.bot import FeasibilityBot
+            from pipeline_analytics.bot.providers import make_provider
 
-            st.session_state.bot = FeasibilityBot()
-            st.session_state.chat = []
-        except Exception as e:  # missing extra or credentials
+            provider = make_provider(*LLM_CFG)
+            old = st.session_state.get("bot")
+            if old is not None:
+                # keep the study; restart the model's context (histories are
+                # provider-specific, so they do not carry across)
+                had_context = bool(old.messages)
+                old.provider, old.model, old.messages = provider, provider.default_model, []
+                if had_context:
+                    st.session_state.chat.append(
+                        ("assistant", f"_Switched to {LLM_CFG[1]}. The study (basis, route, "
+                         "results) is kept; the model's conversation context restarts._")
+                    )  # fmt: skip
+            else:
+                st.session_state.bot = FeasibilityBot(provider=provider)
+                st.session_state.chat = []
+            st.session_state.bot_error = ""
+        except Exception as e:  # missing extra, bad settings
             st.session_state.bot = None
             st.session_state.bot_error = str(e)
+        st.session_state.bot_cfg = LLM_CFG
     bot = st.session_state.bot
     if bot is None:
         st.info(
-            "The bot needs the 'bot' extra and model credentials. Claude (default): set "
-            "ANTHROPIC_API_KEY or sign in with `ant auth login`. Any OpenAI-compatible "
-            "endpoint: set PIPELINE_BOT_PROVIDER=openai, PIPELINE_BOT_MODEL, "
-            "PIPELINE_BOT_BASE_URL and PIPELINE_BOT_API_KEY. Then restart the app. "
+            "The bot could not start with the sidebar settings. Claude: install the 'bot' "
+            "extra and set ANTHROPIC_API_KEY, sign in with `ant auth login`, or paste a key "
+            "in the sidebar. OpenAI-compatible: choose an endpoint and a model name. "
             f"Details: {st.session_state.get('bot_error', '')}"
         )
     else:
@@ -1270,11 +1351,14 @@ with bot_tab:
                     reply = bot.ask(prompt, attachments=atts)
             except Exception as e:  # credentials, network, rate limits
                 st.error(
-                    "The model call failed. Claude (default): set ANTHROPIC_API_KEY or sign "
-                    "in with `ant auth login`. Other providers: check PIPELINE_BOT_BASE_URL "
-                    f"and PIPELINE_BOT_API_KEY. Then restart. ({e})"
+                    "The model call failed. Check the sidebar: for Claude, a key (or "
+                    "ANTHROPIC_API_KEY / `ant auth login`); for other providers, the base URL, "
+                    f"model name and key. ({e})"
                 )
-                st.session_state.pop("bot")
+                # keep the bot and its study; drop the unanswered message so the
+                # conversation stays valid after the settings are fixed
+                if bot.messages and bot.messages[-1]["role"] == "user":
+                    bot.messages.pop()
             else:
                 answer = reply.text
                 if reply.unsupported:
