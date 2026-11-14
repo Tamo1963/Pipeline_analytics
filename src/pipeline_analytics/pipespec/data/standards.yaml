@@ -1,0 +1,28 @@
+# Standards referenced by the PipeSpec Library.
+# Values elsewhere are factual data (strengths, dimensions) with table references,
+# not reproduced text. Verify against your licensed copies before production use.
+standards:
+  - id: API-5L
+    body: API
+    number: "5L / ISO 3183"
+    title: Specification for Line Pipe (technically equivalent to ISO 3183)
+    edition: "API 5L 46th ed. (2018) / ISO 3183:2019"
+    scope: Seamless and welded steel line pipe for pipeline transportation systems
+  - id: ASME-B36.10M
+    body: ASME
+    number: B36.10M
+    title: Welded and Seamless Wrought Steel Pipe
+    edition: "B36.10M (current edition to be confirmed)"
+    scope: Dimensions (OD, wall thickness by schedule) of carbon and alloy steel pipe
+  - id: IS-3589
+    body: BIS
+    number: IS 3589
+    title: Steel Pipes for Water and Sewage (168.3 to 2540 mm outside diameter)
+    edition: "IS 3589:2001 (to be confirmed)"
+    scope: Welded steel pipe for water and sewage service (not hydrocarbon service)
+  - id: ISO-21809
+    body: ISO
+    number: ISO 21809 series
+    title: External coatings for buried or submerged pipelines used in pipeline transportation systems
+    edition: "Parts 1, 2, 3 and 5 (editions to be confirmed)"
+    scope: 3LPE/3LPP (part 1), FBE (part 2), field joints (part 3), concrete weight coating (part 5)

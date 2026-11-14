@@ -1,0 +1,260 @@
+"""Render REPORT.md from results/summary.json (run run_study.py first)."""
+
+from __future__ import annotations
+
+import json
+import math
+from pathlib import Path
+from typing import Any
+
+HERE = Path(__file__).parent
+
+
+def _fmt(v: Any) -> str:
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return "-"
+    if isinstance(v, float):
+        return f"{v:,.1f}" if abs(v) >= 1 else f"{v:.3f}"
+    return str(v)
+
+
+def size_table(by_size: dict[str, Any]) -> str:
+    head = ("| NPS | Grade | MAOP psig | Wall mm (Class 1/2/3) | Pipe t | CAPEX US$M | PV CAPEX | PV OPEX "
+            "| **LCC US$M** | Stations | Compression from yr | Tariff @12 % US$/MMBtu |")  # fmt: skip
+    rows = [head, "|" + "---|" * 12]
+    for nps, r in by_size.items():
+        if "infeasible" in r:
+            rows.append(f"| {nps} | | | | | | | | infeasible: {r['infeasible'][0]} | | | |")
+            continue
+        walls = "/".join(_fmt(r["walls_mm"].get(k)) for k in ("1-2", "2", "3"))
+        rows.append(
+            f"| {nps} | {r['grade']} | {r['maop_psig']} | {walls} | {r['pipe_tonnes']:,} "
+            f"| {_fmt(r['capex_usd_m'])} | {_fmt(r['pv_capex_usd_m'])} | {_fmt(r['pv_opex_usd_m'])} "
+            f"| **{_fmt(r['lcc_usd_m'])}** | {r['max_stations']} | {_fmt(r['first_compression_year'])} "
+            f"| {_fmt(r['tariff_12pct_usd_per_mmbtu'])} |"
+        )
+    return "\n".join(rows)
+
+
+def liquefaction_md() -> str:
+    if not (HERE / "results" / "liquefaction_case.json").exists():
+        return ""
+    return """
+
+## 7b. What-if: liquefaction and lateral spreading at river banks
+
+No borehole data, so this uses a generic young deltaic bank profile and BNBC 2020 Zone 1
+shaking (assumed). See [LIQUEFACTION_CASE.md](LIQUEFACTION_CASE.md).
+* **Liquefaction:** the loose sands liquefy at the code level (LPI about 10).
+* **Lateral spread:** about 2.3 m at the bank toe if the source is 30 km away, small
+  beyond 60 km.
+* **HDD setback:** the remedy is to surface the HDDs back from the bank toes. 24" X65
+  needs 0-300 m (bank 3-8 m), adding at most about US$ 1.8M. The optimum size does not
+  change.
+* **Flotation:** an empty pipe would float in liquefied flood plain. Use anchors or
+  set-on weights, not the concrete coating sized for water.
+* **Data needed:** site borehole (SPT/CPT) data and a site-specific seismic hazard study.
+"""
+
+
+def fault_md() -> str:
+    """Short what-if section if fault_case.py has been run."""
+    f = HERE / "results" / "fault_case.json"
+    if not f.exists():
+        return ""
+    return """
+
+## 7a. What-if: a fault crossing
+
+No mapped active fault crosses this corridor. A hypothetical strike-slip fault on the
+Barishal - Khulna leg (km 60) was tested with the pipe-soil FE model
+([FAULT_CASE.md](FAULT_CASE.md)):
+* **Strike-slip:** crossing at 60-90° to the strike keeps 24" X65 within the strain limits
+  for up to 2 m of slip. Crossings that compress the pipe fail.
+* **Reverse fault:** a 1 m reverse fault fails every size at a 90° crossing.
+* **Sizing:** the optimum diameter does not change. A fault is a question of crossing
+  design and route.
+"""
+
+
+def risk_bullet(risk: dict[str, Any] | None) -> str:
+    if not risk:
+        return ""
+    ranked = sorted(risk["designs"], key=lambda r: -r["prob_cheapest"])
+    top, second = ranked[0], ranked[1]
+    n30 = next((r for r in risk["designs"] if r["design"].startswith('30"')), None)
+    tail = (
+        f' 30" is never the cheapest (P50 US$ {n30["p50_usd_m"]}M).'
+        if n30 and n30["prob_cheapest"] == 0
+        else ""
+    )
+    return (
+        f"* **Under cost and throughput uncertainty** (section 7), {top['design'].split(' @')[0]} "
+        f"is the cheapest in {top['prob_cheapest']:.0%} of Monte Carlo samples (P50 US$ "
+        f"{top['p50_usd_m']}M, P90 {top['p90_usd_m']}M) and {second['design'].split(' @')[0]} "
+        f"in {second['prob_cheapest']:.0%}.{tail}\n"
+    )
+
+
+def risk_md(risk: dict[str, Any] | None) -> str:
+    if not risk:
+        return ""
+    rows = "\n".join(
+        f"| {r['design']} | {_fmt(r['p10_usd_m'])} | {_fmt(r['p50_usd_m'])} "
+        f"| {_fmt(r['p90_usd_m'])} | {_fmt(r['deterministic_usd_m'])} "
+        f"| {r['prob_cheapest']:.0%} | {r['prob_infeasible']:.0%} |"
+        for r in risk["designs"]
+    )
+    top = max(risk["designs"], key=lambda r: r["prob_cheapest"])
+    return f"""
+
+## 7. Risk (Monte Carlo, route A)
+
+The best grade and MAOP of each size, under unit-rate and throughput uncertainty. All sizes
+see the same samples, so "cheapest" compares like with like. **{top["design"]} is the
+cheapest in {top["prob_cheapest"]:.0%} of samples.**
+
+| Design | P10 US$M | P50 US$M | P90 US$M | Deterministic US$M | Cheapest | Infeasible |
+|---|---|---|---|---|---|---|
+{rows}
+
+{risk["note"]} "-": the percentile falls in samples where that design is infeasible.
+"""
+
+
+def main() -> None:
+    d = json.loads((HERE / "results" / "summary.json").read_text())
+    a, b = d["alignments"]["A_note"], d["alignments"]["B_gtcl"]
+    res, cal = d["reserves"], d["calibration"]
+    a30 = a["by_size"].get("30", {})
+    best_a = a["best"]
+    prem = (a30["lcc_usd_m"] / best_a["lcc_usd_m"] - 1) * 100 if "lcc_usd_m" in a30 else math.nan
+    sens = d["sensitivity"]
+    wins = sorted({s["best_nps"] for s in sens}, key=float)
+    out = (
+        f"""# Bhola - Barishal - Khulna Gas Pipeline: Screening Optimisation
+
+*Phase 5 test case for the pipeline-analytics optimiser. Generated by `make_report.py` from
+`results/summary.json` ({d["evaluations"]} option evaluations, {d["runtime_s"]} s).*
+
+> **Status: screening study.** Costs use the software's PLACEHOLDER India 2026 unit rates as a
+> regional proxy, converted at an assumed INR 88 / US$. Route quantities (river HDD lengths,
+> wetland share, crossings, towns) are engineering assumptions, not survey data; every input
+> and its source is in `case.yaml`. Use the results to compare options, not as a budget.
+
+## 1. Answer
+
+* **The 30-inch design proposed in the note is not the lowest lifecycle-cost option** for
+  180 MMSCFD on the note's 173 km route. The optimum is **{best_a["nps"]}" {best_a["grade"]} at
+  {best_a["maop_psig"]} psig** (LCC US$ {best_a["lcc_usd_m"]}M PV). 30" costs
+  **{prem:.0f} % more** over the life of the project (US$ {a30.get("lcc_usd_m", "-")}M).
+* The finding is robust: across {len(sens)} sensitivity cases the optimum is
+  {" or ".join(w + chr(34) for w in wins)}, never 30". The gap to 30" narrows most when
+  throughput rises to 260 MMSCFD (see section 6). A larger pipe is justified only by flow beyond 180 MMSCFD, e.g.
+  national-grid transit or proven upside reserves.
+{risk_bullet(d.get("risk"))}* **Compression:** with field pressure falling from 62 to 35 barg, the optimum needs compression
+  from year {_fmt(best_a["first_compression_year"])} (peak {best_a["peak_compression_mw"]} MW).
+  The note's "en-route compressors" are needed only as the fields deplete; they can be phased
+  in rather than built on day one.
+* **Reserves limit the plateau.** Of {res["remaining_recoverable_tcf"]} Tcf remaining
+  recoverable gas, 180 MMSCFD lasts **{res["years_at_pipeline_rate_only"]} years** (the "19 years"
+  in the press), but only **{res["years_if_local_use_continues"]} years** if the island's
+  existing ~80 MMSCFD power and CNG use continues.
+
+## 2. Inputs and discrepancies found
+
+| Item | Note | Public GTCL proposal (TBS) | Used |
+|---|---|---|---|
+| Route | Bhola - Laharhat - Barishal - Jhalokathi - Pirojpur - Bagerhat - Khulna | Shahbazpur - Bhola North - Ilisha - Mehendiganj - Hizla - Barishal - Khulna | both (A, B) |
+| Length | 63 + 110 = **173 km** | 96 + 109 = **205 km** | per route |
+| Diameter | 30" throughout | 24" (Bhola - Barishal) + 30" (Barishal - Khulna) | optimised |
+| Recoverable reserves | "1,432 to 1,500 trillion cubic feet" | 1.432 **Tcf** recoverable (Bapex) | 1.432 Tcf |
+| Throughput | 180 MMSCFD unutilised | 180 MMSCFD for 19 years | 180 MMSCFD |
+| Cost | - | Tk 4,500 crore (~US$ {cal["gtcl_budget_usd_m"]}M); O&M Tk 16.42 crore/yr | calibration case |
+
+* The note's reserve figure in **trillion** cubic feet is a units error: it should be billion
+  cubic feet (1.432 Tcf).
+* The note's route (via Laharhat) is 32 km shorter than the route recommended by the
+  CEGIS / ILF feasibility study (via Mehendiganj and Hizla). That study chose its route after
+  analysing river erosion, so the shorter route needs checking against erosion and
+  river-crossing constraints before it is relied on.
+
+Key assumptions (all in `case.yaml`): Barishal offtake 1/3 of flow at >= 25 barg; Khulna
+delivery >= 40 barg; supply 62 barg falling to 35 barg over the plateau; MAOP 1000 or 1440 psig;
+gas-turbine compressors (fuel at INR 25/scm); deltaic soft clay with the water table at the
+surface (ALA checks, concrete coating on wet lengths); river HDD 6 km (route A, leg 1) and
+3 km (leg 2), 9 km on route B leg 1; real discount rate 10 %; BOO, 2-year construction.
+
+## 3. Route A (note): lifecycle cost by diameter
+
+Best grade and MAOP for each size. LCC = PV(CAPEX) + PV(OPEX) over {d["alignments"]["A_note"]["length_km"]:.0f} km.
+
+{size_table(a["by_size"])}
+
+## 4. Route B (GTCL / CEGIS): lifecycle cost by diameter
+
+{size_table(b["by_size"])}
+
+Route B is {b["length_km"] - a["length_km"]:.0f} km longer with {b["hdd_m"] - a["hdd_m"]:,.0f} m more
+river HDD (assumed), so it costs more on every diameter in this screening. Route choice should
+still follow the erosion evidence from the CEGIS / ILF study, not cost alone.
+
+## 5. Absolute cost: calibration against the GTCL budget
+
+The placeholder rates give US$ {cal["model_gtcl_design_usd_m"]}M for GTCL's design (24"/30",
+205 km, length-weighted), against the published Tk 4,500 crore (~US$ {cal["gtcl_budget_usd_m"]}M):
+a factor of **{cal["capital_rate_factor"]}**. Likely reasons: Bangladesh costs and imported pipe;
+multi-kilometre HDD or trenched crossings of wide, erosion-prone rivers (far dearer than the
+generic HDD rate); river-bank protection; field gathering lines; land, duties and financing.
+The "calibrated" sensitivity scales all capital rates by this factor. **The optimum diameter
+does not change.**
+
+## 6. Sensitivity (route A; design re-optimised in each case)
+
+Sizes 20-30", grades X65/X70, both MAOPs.
+
+| Case | Best | LCC US$M | 30" LCC US$M | 30" premium | Tariff @12 % US$/MMBtu |
+|---|---|---|---|---|---|
+"""
+        + "\n".join(
+            f'| {s["case"]} | {s["best_nps"]}" {s["best_grade"]} @ {s["best_maop_psig"]} psig '
+            f"| {_fmt(s['best_lcc_usd_m'])} | {_fmt(s['lcc_30in_usd_m'])} | {_fmt(s['30in_premium_pct'])} % "
+            f"| {_fmt(s['best_tariff_usd_per_mmbtu'])} |"
+            for s in sens
+        )
+        + risk_md(d.get("risk"))
+        + fault_md()
+        + liquefaction_md()
+        + """
+
+## 8. What would change the answer, and what data is needed
+
+1. **Throughput.** Larger diameters gain as design flow rises. At 260 MMSCFD the optimum moves
+   up one size and the gap to 30" narrows (section 6). A 30" line pays off only for flows well
+   above that (national-grid transit, LNG back-feed, proven upside reserves). Confirm the design
+   flow and its duration with Petrobangla / GTCL.
+2. **Field pressure forecast.** This drives when compression is needed and the optimum size.
+   Obtain the BAPEX well deliverability and pressure decline forecast.
+3. **River crossings.** Survey crossing widths, scour and erosion (CEGIS / ILF data), and
+   choose the crossing method. This is the biggest cost and constructability risk.
+4. **Unit rates.** Replace the placeholder rates with Bangladesh rates (or the GTCL estimate
+   breakdown) via a rate file; no code changes are needed.
+5. **Offtakes and delivery pressures** at Barishal and Khulna (grid entry pressure).
+
+## 9. Reproduce
+
+```bash
+uv run python studies/bhola_khulna/run_study.py --workers 4
+```
+
+```bash
+uv run python studies/bhola_khulna/make_report.py
+```
+"""
+    )
+    (HERE / "REPORT.md").write_text(out)
+    print("wrote", HERE / "REPORT.md")
+
+
+if __name__ == "__main__":
+    main()
